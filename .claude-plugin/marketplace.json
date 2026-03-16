@@ -1,0 +1,14 @@
+{
+  "name": "maestro-memory",
+  "display_name": "Maestro Memory",
+  "version": "0.1.0",
+  "description": "Temporal hybrid memory for AI agents. Combines BM25, embedding similarity, and knowledge graph traversal with time-aware scoring in a single SQLite file.",
+  "author": "Maestro AI",
+  "license": "MIT",
+  "homepage": "https://github.com/maestro-ai-stack/maestro-memory",
+  "categories": ["memory", "knowledge-graph", "retrieval"],
+  "tags": ["memory", "knowledge-graph", "temporal", "bm25", "embeddings", "sqlite", "agent"],
+  "install": "pip install maestro-memory",
+  "requires_api_key": false,
+  "optional_api_keys": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+}

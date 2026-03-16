@@ -1,0 +1,34 @@
+{
+  "name": "maestro-memory",
+  "version": "0.1.0",
+  "description": "Temporal hybrid memory for AI agents — search, add, and traverse knowledge graphs with time-aware retrieval",
+  "entrypoint": "mmem",
+  "install": "pip install -e .",
+  "commands": [
+    {
+      "name": "search",
+      "description": "Hybrid search across memory (BM25 + embedding + graph)",
+      "usage": "mmem search <query> [--limit N] [--current] [--as-of DATE]"
+    },
+    {
+      "name": "add",
+      "description": "Add content to memory with optional LLM extraction",
+      "usage": "mmem add <content> [--type TYPE] [--source SOURCE] [--importance FLOAT]"
+    },
+    {
+      "name": "graph",
+      "description": "Explore the knowledge graph",
+      "usage": "mmem graph [--entity NAME] [--hops N] [--list-entities]"
+    },
+    {
+      "name": "status",
+      "description": "Show memory database statistics",
+      "usage": "mmem status [--project]"
+    },
+    {
+      "name": "config",
+      "description": "Manage configuration",
+      "usage": "mmem config init|show"
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 #!/bin/bash
-# Stop hook: 对话结束时自动保存短期记忆到 maestro-memory
-# 读取 stdin JSON 的 transcript_path，提取最后 ~2000 字符，写入 mmem
+# Stop hook: auto-save short-term memory to maestro-memory on conversation end
+# Read transcript_path from stdin JSON, extract last ~2000 chars, write to mmem
 set -euo pipefail
 
-# ── 安全退出：任何失败都不阻塞用户 ──────────────────────────────
+# ── Safe exit: never block user on failure ────────────────────────
 trap 'exit 0' ERR
 
-# ── 读取 stdin JSON ─────────────────────────────────────────────
+# ── Read stdin JSON ───────────────────────────────────────────────
 INPUT="$(cat)"
 TRANSCRIPT="$(echo "$INPUT" | python3 -c "
 import sys, json
@@ -17,7 +17,7 @@ print(data.get('transcript_path', ''))
 [ -z "$TRANSCRIPT" ] && exit 0
 [ ! -f "$TRANSCRIPT" ] && exit 0
 
-# ── 提取最后若干条 assistant 消息（合计 ~2000 字符）──────────────
+# ── Extract last N assistant messages (~2000 chars total) ────────
 TAIL="$(python3 -c "
 import json, sys
 
@@ -33,7 +33,7 @@ for line in reversed(lines):
         continue
     if obj.get('role') != 'assistant':
         continue
-    # 取 content 文本
+    # Extract content text
     content = obj.get('content', '')
     if isinstance(content, list):
         content = ' '.join(
@@ -46,14 +46,14 @@ for line in reversed(lines):
     if total >= 2000:
         break
 
-# 拼接并截断
+# Concatenate and truncate
 text = '\n---\n'.join(msgs)[-2000:]
 print(text)
 " 2>/dev/null || true)"
 
 [ -z "$TAIL" ] && exit 0
 
-# ── 写入 mmem ──────────────────────────────────────────────────
+# ── Write to mmem ────────────────────────────────────────────────
 mmem add --type conversation --source conversation "$TAIL" 2>/dev/null || true
 
 exit 0

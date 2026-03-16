@@ -6,16 +6,16 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# ── 支持的图片格式 ────────────────────────────────────────────────
+# ── Supported image formats ────────────────────────────────────────────────
 IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 OCR_EXTS = IMAGE_EXTS | {".pdf"}
 _TIMEOUT = 30
 
 
-# ── GLM-OCR 提取 ─────────────────────────────────────────────────
+# ── GLM-OCR extraction ─────────────────────────────────────────────────
 async def ocr_extract(image_path: Path) -> str:
-    """通过 ollama glm-ocr 提取图片/PDF 文字。
-    ollama 或模型不可用时静默返回空字符串。"""
+    """Extract text from images/PDFs via ollama glm-ocr.
+    Silently returns empty string when ollama or model is unavailable."""
     if image_path.suffix.lower() not in OCR_EXTS:
         return ""
 
@@ -38,10 +38,10 @@ async def ocr_extract(image_path: Path) -> str:
 
 
 def is_ocr_target(path: Path) -> bool:
-    """判断是否需要 OCR 处理"""
+    """Check if the file needs OCR processing."""
     return path.suffix.lower() in OCR_EXTS
 
 
 def is_image(path: Path) -> bool:
-    """判断是否为图片文件"""
+    """Check if the file is an image."""
     return path.suffix.lower() in IMAGE_EXTS

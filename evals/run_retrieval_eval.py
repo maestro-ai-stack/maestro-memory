@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Retrieval benchmark for maestro-memory.
 
-直接评测 mmem search 的检索质量，不走 Claude LLM。
-每个场景：seed 数据 → 搜索 → 检查 top-k 是否包含预期事实。
+Directly evaluate mmem search retrieval quality without Claude LLM.
+Each scenario: seed data -> search -> check if top-k contains expected facts.
 """
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# 加载模块
+# Load modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from maestro_memory import Memory
 
 
-# ── 评测场景 ────────────────────────────────────────────────────
+# ── Eval scenarios ────────────────────────────────────────────────
 
 SCENARIOS = [
     {
@@ -166,24 +166,24 @@ SCENARIOS = [
 ]
 
 
-# ── 评测引擎 ────────────────────────────────────────────────────
+# ── Eval engine ────────────────────────────────────────────────────
 
 async def eval_scenario(scenario: dict) -> dict:
-    """评测单个场景"""
+    """Evaluate a single scenario."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "eval.db"
         mem = Memory(path=db_path)
         await mem.init()
 
-        # 写入数据
+        # Seed data
         for fact in scenario["facts"]:
             await mem.add(fact, source_type="eval")
 
-        # 检索评测
+        # Retrieval evaluation
         query_results = []
         for query, expected_keywords in scenario["queries"]:
             results = await mem.search(query, limit=5)
-            # 检查 top-5 是否包含预期关键词
+            # Check if top-5 results contain expected keywords
             all_content = " ".join(r.fact.content for r in results).lower()
             hits = [kw for kw in expected_keywords if kw.lower() in all_content]
             query_results.append({
@@ -207,7 +207,7 @@ async def eval_scenario(scenario: dict) -> dict:
 
 
 async def main():
-    # 支持指定场景
+    # Filter by scenario name if args provided
     scenarios = SCENARIOS
     if len(sys.argv) > 1:
         names = {s.lower() for s in sys.argv[1:]}
@@ -220,14 +220,14 @@ async def main():
         result = await eval_scenario(scenario)
         results.append(result)
 
-        # 打印详情
+        # Print details
         status = "PASS" if result["avg_recall"] >= 0.8 else "FAIL"
         print(f"[{status}] {result['name']} — recall: {result['avg_recall']:.0%}")
         for q in result["queries"]:
             qstatus = "ok" if q["recall"] == 1.0 else "MISS"
             print(f"  [{qstatus}] '{q['query']}' → {q['hits']} | miss: {q['miss']}")
 
-    # 汇总
+    # Summary
     print(f"\n{'='*60}")
     print(f"  RETRIEVAL BENCHMARK SUMMARY")
     print(f"{'='*60}")
@@ -248,7 +248,7 @@ async def main():
     print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8}")
     print(f"  {'OVERALL':<25} {avg:>7.0%} {sum(r['total_queries'] for r in results):>8} {passed}/{n}")
 
-    # 保存
+    # Save results
     results_dir = Path(__file__).parent / "results"
     results_dir.mkdir(exist_ok=True)
     (results_dir / "retrieval_benchmark.json").write_text(

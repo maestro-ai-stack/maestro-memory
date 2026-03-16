@@ -9,7 +9,7 @@ from maestro_memory.ingestion.chunker import chunk_text
 from maestro_memory.ingestion.dedup import is_duplicate
 from maestro_memory.ingestion.ocr import is_image, is_ocr_target, ocr_extract
 
-# ── 结果统计 ────────────────────────────────────────────────────
+# ── Result stats ────────────────────────────────────────────────────
 
 
 @dataclass
@@ -22,11 +22,11 @@ class ConsolidateResult:
     errors: list[str] = field(default_factory=list)
 
 
-# ── Glob 展开 ──────────────────────────────────────────────────
+# ── Glob expansion ──────────────────────────────────────────────────
 
 
 def expand_paths(patterns: list[str]) -> list[Path]:
-    """展开 glob 模式 + ~ 路径，去重保序"""
+    """Expand glob patterns + ~ paths, deduplicate while preserving order."""
     seen: set[Path] = set()
     result: list[Path] = []
     for pat in patterns:
@@ -40,11 +40,11 @@ def expand_paths(patterns: list[str]) -> list[Path]:
     return result
 
 
-# ── 文件读取（含 OCR）─────────────────────────────────────────
+# ── File reading (with OCR) ─────────────────────────────────────────
 
 
 async def _read_file(path: Path) -> str:
-    """读取文件内容：图片走 OCR，PDF 先 OCR 后 fallback 文本，其余直接读"""
+    """Read file content: images via OCR, PDFs try OCR then fallback to text, others read directly."""
     if is_image(path):
         return await ocr_extract(path)
     if path.suffix.lower() == ".pdf":
@@ -55,7 +55,7 @@ async def _read_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-# ── 主管线 ─────────────────────────────────────────────────────
+# ── Main pipeline ─────────────────────────────────────────────────────
 
 
 async def consolidate(
@@ -65,7 +65,7 @@ async def consolidate(
     source_type: str = "file",
     dry_run: bool = False,
 ) -> ConsolidateResult:
-    """批量摄入文件：分块 → 去重 → 写入"""
+    """Batch-ingest files: chunk -> dedup -> write."""
     result = ConsolidateResult()
     ep = memory._embedding_provider  # noqa: SLF001
 

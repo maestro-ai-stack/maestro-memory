@@ -21,19 +21,19 @@ SCENARIOS_PATH = Path(__file__).parent / "scenarios.json"
 SKILL_PATH = Path(__file__).parent.parent / "skill" / "SKILL.md"
 
 
-# ── 数据准备 ────────────────────────────────────────────────────
+# ── Data preparation ──────────────────────────────────────────────
 
 def seed_scenario(scenario: dict, db_path: Path) -> None:
-    """执行 setup 命令，写入测试数据到指定 DB"""
+    """Run setup commands to seed test data into the given DB."""
     env = {**os.environ, "MAESTRO_MEMORY_DB": str(db_path)}
     for cmd in scenario["setup"]:
         subprocess.run(cmd, shell=True, env=env, capture_output=True)
 
 
-# ── Claude 调用 ─────────────────────────────────────────────────
+# ── Claude invocation ────────────────────────────────────────────
 
 def run_claude(query: str, *, with_skill: bool, db_path: Path, timeout: int = 120) -> str:
-    """调用 claude -p，返回输出文本"""
+    """Call claude -p and return output text."""
     if with_skill:
         prompt = (
             f"You have access to maestro-memory via the `mmem` CLI tool. "
@@ -59,14 +59,14 @@ def run_claude(query: str, *, with_skill: bool, db_path: Path, timeout: int = 12
         return "[ERROR: claude CLI not found]"
 
 
-# ── 评分 ────────────────────────────────────────────────────────
+# ── Grading ──────────────────────────────────────────────────────
 
 def grade_output(output: str, assertions: list[str]) -> list[dict]:
-    """简单关键词匹配评分（生产环境应用 LLM-as-judge）"""
+    """Simple keyword-matching grader (production should use LLM-as-judge)."""
     results = []
     output_lower = output.lower()
     for assertion in assertions:
-        # 提取关键词（引号内或关键短语）
+        # Extract keywords (quoted or key phrases)
         keywords = extract_keywords(assertion)
         passed = any(kw.lower() in output_lower for kw in keywords)
         results.append({"assertion": assertion, "passed": passed, "keywords": keywords})
@@ -74,16 +74,16 @@ def grade_output(output: str, assertions: list[str]) -> list[dict]:
 
 
 def extract_keywords(assertion: str) -> list[str]:
-    """从 assertion 中提取检查关键词"""
+    """Extract check keywords from an assertion."""
     keywords = []
-    # 提取引号内内容
+    # Extract quoted content
     import re
     quoted = re.findall(r'[\$]?[\d,]+[KkMm]?', assertion)
     keywords.extend(quoted)
-    # 提取大写词或专有名词
+    # Extract capitalized words or proper nouns
     words = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', assertion)
     keywords.extend(words)
-    # 提取关键英文短语
+    # Extract key English phrases
     for phrase in ["shellfish", "dizziness", "headache", "losartan", "lisinopril",
                    "sigmoid", "jenkins", "cache warming", "batch processing",
                    "Neo4j", "SQLite", "ACT-R", "Ebbinghaus", "Datadog",
@@ -91,17 +91,17 @@ def extract_keywords(assertion: str) -> list[str]:
                    "token bucket", "rate limiter", "Kubernetes", "k8s"]:
         if phrase.lower() in assertion.lower():
             keywords.append(phrase)
-    # fallback: 用 assertion 里最长的词
+    # Fallback: use the longest word in the assertion
     if not keywords:
         words = assertion.split()
         keywords = [max(words, key=len)] if words else [""]
     return keywords
 
 
-# ── 主流程 ───────────────────────────────────────────────────────
+# ── Main flow ────────────────────────────────────────────────────
 
 def run_scenario(scenario: dict, results_dir: Path) -> dict:
-    """跑单个场景的 A/B 对比"""
+    """Run A/B comparison for a single scenario."""
     sid = scenario["id"]
     print(f"\n{'='*60}")
     print(f"  Scenario: {scenario['name']} ({sid})")
@@ -110,7 +110,7 @@ def run_scenario(scenario: dict, results_dir: Path) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "eval.db"
 
-        # 准备数据
+        # Seed data
         print(f"  Seeding {len(scenario['setup'])} facts...")
         seed_scenario(scenario, db_path)
 
@@ -122,7 +122,7 @@ def run_scenario(scenario: dict, results_dir: Path) -> dict:
         print(f"  Running WITHOUT skill...")
         without_output = run_claude(scenario["query"], with_skill=False, db_path=db_path)
 
-    # 评分
+    # Grade outputs
     with_grades = grade_output(with_output, scenario["assertions"])
     without_grades = grade_output(without_output, scenario["assertions"])
 
@@ -137,11 +137,11 @@ def run_scenario(scenario: dict, results_dir: Path) -> dict:
         "delta": (with_pass - without_pass) / total,
     }
 
-    # 保存
+    # Save result
     out_path = results_dir / f"{sid}.json"
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
-    # 打印摘要
+    # Print summary
     print(f"  WITH skill:    {with_pass}/{total} ({result['with_skill']['pass_rate']:.0%})")
     print(f"  WITHOUT skill: {without_pass}/{total} ({result['without_skill']['pass_rate']:.0%})")
     print(f"  Delta:         {result['delta']:+.0%}")
@@ -152,7 +152,7 @@ def run_scenario(scenario: dict, results_dir: Path) -> dict:
 def main():
     scenarios = json.loads(SCENARIOS_PATH.read_text())
 
-    # 支持指定场景
+    # Filter by scenario ID if args provided
     if len(sys.argv) > 1:
         ids = sys.argv[1:]
         scenarios = [s for s in scenarios if s["id"] in ids]
@@ -165,7 +165,7 @@ def main():
         result = run_scenario(scenario, results_dir)
         all_results.append(result)
 
-    # 汇总报告
+    # Summary report
     print(f"\n{'='*60}")
     print(f"  SUMMARY")
     print(f"{'='*60}")
@@ -187,7 +187,7 @@ def main():
         print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8}")
         print(f"  {'AVERAGE':<25} {avg_w:>7.0%} {avg_wo:>7.0%} {avg_w - avg_wo:>+7.0%}")
 
-    # 保存汇总
+    # Save summary
     summary_path = results_dir / "summary.json"
     summary_path.write_text(json.dumps(all_results, indent=2, ensure_ascii=False))
     print(f"\n  Results saved to {results_dir}/")

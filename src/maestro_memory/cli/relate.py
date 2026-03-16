@@ -29,7 +29,7 @@ async def _relate(
     mem = Memory(project=project)
     await mem.init()
     try:
-        # 自动创建实体（如不存在）
+        # Auto-create entities if they don't exist
         sub_entity, sub_created = await mem.store.get_or_create_entity(subject, subject_type)
         obj_entity, obj_created = await mem.store.get_or_create_entity(obj, object_type)
 

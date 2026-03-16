@@ -44,7 +44,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
 
 class BGEEmbeddingProvider(EmbeddingProvider):
-    """BGE-M3 多语言嵌入，懒加载。"""
+    """BGE-M3 multilingual embedding, lazy-loaded."""
 
     def __init__(self) -> None:
         self._model = None
@@ -61,7 +61,7 @@ class BGEEmbeddingProvider(EmbeddingProvider):
         return embedding.astype(np.float32)
 
 
-# ── 工厂函数 ──────────────────────────────────────────────
+# ── Factory ──────────────────────────────────────────────
 
 _MODEL_PROVIDERS: dict[str, type[EmbeddingProvider]] = {
     "bge-m3": BGEEmbeddingProvider,

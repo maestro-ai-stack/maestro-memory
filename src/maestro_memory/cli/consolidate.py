@@ -8,7 +8,7 @@ import typer
 from maestro_memory.core.memory import Memory
 from maestro_memory.ingestion.consolidate import ConsolidateResult, consolidate, expand_paths
 
-# ── CLI 命令 ────────────────────────────────────────────────────
+# ── CLI command ────────────────────────────────────────────────────
 
 
 def consolidate_cmd(
@@ -33,7 +33,7 @@ def consolidate_cmd(
     _print_summary(result)
 
 
-# ── 异步入口 ────────────────────────────────────────────────────
+# ── Async entry ────────────────────────────────────────────────────
 
 
 async def _run(files: list, project: str | None, dry_run: bool) -> ConsolidateResult:

@@ -63,7 +63,7 @@ class Store:
         )
         await self.db.commit()
         eid = cur.lastrowid
-        # sync FTS（中文分词后写入）
+        # sync FTS (write after word segmentation)
         await self.db.execute(
             "INSERT INTO entities_fts (rowid, name, summary) VALUES (?, ?, ?)",
             (eid, segment(name), segment(summary)),
@@ -149,7 +149,7 @@ class Store:
         )
         await self.db.commit()
         fid = cur.lastrowid
-        # sync FTS（中文分词后写入）
+        # sync FTS (write after word segmentation)
         await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fid, segment(content)))
         await self.db.commit()
         return fid  # type: ignore[return-value]
@@ -161,7 +161,7 @@ class Store:
 
     async def update_fact(self, fact_id: int, content: str) -> None:
         await self.db.execute("UPDATE facts SET content = ? WHERE id = ?", (content, fact_id))
-        # sync FTS（中文分词后写入）
+        # sync FTS (write after word segmentation)
         await self.db.execute("DELETE FROM facts_fts WHERE rowid = ?", (fact_id,))
         await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fact_id, segment(content)))
         await self.db.commit()

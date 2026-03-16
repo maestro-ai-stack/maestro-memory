@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 async def fts5_search_facts(store: Store, query: str, limit: int = 30) -> list[tuple[int, float]]:
     """Search facts via FTS5 BM25. Returns list of (fact_id, bm25_score)."""
-    # 中文分词 + 转义 FTS5 特殊字符
+    # Chinese word segmentation + escape FTS5 special chars
     safe_query = _escape_fts(segment(query))
     if not safe_query.strip():
         return []
@@ -50,7 +50,7 @@ def _escape_fts(query: str) -> str:
     tokens = cleaned.split()
     if not tokens:
         return ""
-    # 查询扩展：补充同义词/缩写/上下位词
+    # Query expansion: add synonyms/abbreviations/hypernyms
     expanded = set(tokens)
     for t in tokens:
         for syn in _SYNONYMS.get(t.lower(), []):
@@ -58,24 +58,24 @@ def _escape_fts(query: str) -> str:
     return " OR ".join(expanded)
 
 
-# ── 同义词表（轻量级查询扩展）────────────────────────────────
+# ── Synonym table (lightweight query expansion) ───────────────
 _SYNONYMS: dict[str, list[str]] = {
-    # 医疗缩写
+    # Medical abbreviations
     "bp": ["blood", "pressure", "hypertension"],
     "blood": ["bp", "pressure"],
     "pressure": ["bp", "blood"],
     "hypertension": ["bp", "blood", "pressure"],
     "hr": ["heart", "rate"],
-    # 食物/过敏
+    # Food/allergy
     "food": ["dietary", "allergy", "allergic", "vegetarian", "shellfish", "meal"],
     "restrictions": ["allergy", "allergic", "dietary", "preference"],
     "diet": ["food", "vegetarian", "allergic", "meal"],
     "allergy": ["allergic", "food", "restrictions"],
-    # 症状
+    # Symptoms
     "symptoms": ["complaint", "symptom", "reports", "dizziness", "headache", "pain"],
     "side": ["effect", "adverse", "reaction"],
     "effect": ["side", "adverse"],
-    # 通用业务
+    # General business
     "status": ["update", "current", "progress"],
     "deadline": ["eta", "due", "date"],
     "eta": ["deadline", "estimate", "expected"],

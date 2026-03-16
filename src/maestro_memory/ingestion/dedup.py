@@ -8,16 +8,16 @@ import numpy as np
 from maestro_memory.core.store import Store
 from maestro_memory.retrieval.embedding import EmbeddingProvider, cosine_similarity
 
-# ── 内容哈希 ────────────────────────────────────────────────────
+# ── Content hash ────────────────────────────────────────────────────
 
 
 def content_hash(text: str) -> str:
-    """归一化空白 + 小写后取 SHA256"""
+    """Normalize whitespace + lowercase, then compute SHA256."""
     normalized = re.sub(r"\s+", " ", text.strip().lower())
     return hashlib.sha256(normalized.encode()).hexdigest()
 
 
-# ── 三级去重 ────────────────────────────────────────────────────
+# ── Three-tier dedup ────────────────────────────────────────────────────
 
 
 async def is_duplicate(
@@ -27,28 +27,28 @@ async def is_duplicate(
     threshold: float = 0.9,
 ) -> tuple[bool, int | None]:
     """
-    三级去重检测：
-    1. 精确哈希匹配
-    2. Embedding 余弦相似度
-    3. LLM（暂跳过）
-    返回 (is_dup, existing_fact_id)
+    Three-tier duplicate detection:
+    1. Exact hash match
+    2. Embedding cosine similarity
+    3. LLM (skipped for now)
+    Returns (is_dup, existing_fact_id).
     """
     target_hash = content_hash(content)
 
-    # Tier 1: 精确哈希
+    # Tier 1: exact hash
     facts = await store.list_facts(limit=5000, current_only=True)
     for fact in facts:
         if content_hash(fact.content) == target_hash:
             return True, fact.id
 
-    # Tier 2: 向量相似度
+    # Tier 2: vector similarity
     if embedding_provider is not None:
         query_emb = await embedding_provider.embed(content)
         if query_emb is not None:
             for fact in facts:
                 if not hasattr(fact, "id"):
                     continue
-                # 读取 fact embedding（存储为 bytes）
+                # Read fact embedding (stored as bytes)
                 raw = await store.db.execute(
                     "SELECT embedding FROM facts WHERE id = ?", (fact.id,),
                 )
@@ -58,5 +58,5 @@ async def is_duplicate(
                     if cosine_similarity(query_emb, fact_emb) > threshold:
                         return True, fact.id
 
-    # Tier 3: LLM — 暂跳过
+    # Tier 3: LLM — skipped for now
     return False, None

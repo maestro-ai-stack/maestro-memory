@@ -40,11 +40,11 @@ class Memory:
     ) -> AddResult:
         """Ingest content into memory.
 
-        Agent 可以直接指定 entity_name，跳过 LLM 提取。
+        Agent can specify entity_name directly, skipping LLM extraction.
         """
         episode_id = await self.store.add_episode(content, source_type, source_ref)
 
-        # Agent 直传实体 → 跳过 LLM 提取
+        # Agent provides entity directly -> skip LLM extraction
         if entity_name:
             operations = [{"op": "ADD", "fact": content, "entity": entity_name,
                           "entity_type": entity_type, "type": fact_type, "importance": importance}]

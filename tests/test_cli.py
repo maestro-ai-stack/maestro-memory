@@ -1,8 +1,6 @@
 """Tests for CLI commands using typer.testing.CliRunner."""
 from __future__ import annotations
 
-import os
-
 import pytest
 from typer.testing import CliRunner
 

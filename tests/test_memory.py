@@ -36,7 +36,7 @@ async def test_add_multiple_search(memory: Memory) -> None:
 
 @pytest.mark.asyncio
 async def test_search_current_only(memory: Memory) -> None:
-    result = await memory.add("Deprecated preference")
+    await memory.add("Deprecated preference")
     # Invalidate the fact we just added
     facts = await memory.store.list_facts(current_only=False)
     assert len(facts) >= 1

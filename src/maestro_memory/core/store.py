@@ -159,7 +159,6 @@ class Store:
         return self._row_to_fact(row) if row else None
 
     async def update_fact(self, fact_id: int, content: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
         await self.db.execute("UPDATE facts SET content = ? WHERE id = ?", (content, fact_id))
         # sync FTS
         await self.db.execute("DELETE FROM facts_fts WHERE rowid = ?", (fact_id,))

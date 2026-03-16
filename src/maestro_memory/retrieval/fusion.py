@@ -21,7 +21,7 @@ def reciprocal_rank_fusion(*result_lists: list[tuple[int, float]], k: int = 60) 
     """Fuse multiple ranked lists using Reciprocal Rank Fusion."""
     scores: dict[int, float] = defaultdict(float)
     for results in result_lists:
-        for rank, (item_id, _score) in enumerate(results):
+        for rank, (item_id, _) in enumerate(results):
             scores[item_id] += 1.0 / (k + rank + 1)
     return sorted(scores.items(), key=lambda x: -x[1])
 

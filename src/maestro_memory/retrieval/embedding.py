@@ -20,7 +20,7 @@ class EmbeddingProvider(abc.ABC):
 class NullEmbeddingProvider(EmbeddingProvider):
     """Returns None when no provider is available."""
 
-    async def embed(self, text: str) -> ndarray | None:
+    async def embed(self, text: str) -> ndarray | None:  # noqa: ARG002
         return None
 
 
@@ -38,6 +38,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
     async def embed(self, text: str) -> ndarray | None:
         self._load_model()
+        assert self._model is not None
         embedding = self._model.encode(text, convert_to_numpy=True)
         return embedding.astype(np.float32)
 
@@ -46,7 +47,8 @@ def get_embedding_provider(provider: str = "local", model: str = "all-MiniLM-L6-
     """Factory: return the best available provider, gracefully falling back."""
     if provider == "local":
         try:
-            import sentence_transformers  # noqa: F401
+            import sentence_transformers as _st  # noqa: F401
+            _ = _st
             return LocalEmbeddingProvider(model)
         except ImportError:
             return NullEmbeddingProvider()

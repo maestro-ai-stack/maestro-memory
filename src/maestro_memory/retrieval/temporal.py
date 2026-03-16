@@ -9,7 +9,7 @@ from maestro_memory.core.models import Fact
 def temporal_score(fact: Fact, as_of: datetime | None = None) -> float:
     """Ebbinghaus-inspired temporal decay score."""
     base = fact.importance
-    now = as_of or datetime.utcnow()
+    now = as_of or datetime.now(tz=None)
 
     # Parse created_at
     try:
@@ -36,7 +36,7 @@ def filter_temporal(
     if not current_only and not as_of:
         return facts
 
-    now_str = as_of or datetime.utcnow().isoformat()
+    now_str = as_of or datetime.now(tz=None).isoformat()
     result = []
     for f in facts:
         # If current_only, exclude expired facts

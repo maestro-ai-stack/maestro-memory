@@ -103,8 +103,8 @@ class Memory:
             limit=limit, current_only=current_only, as_of=as_of,
         )
 
-    async def graph(self, entity_name: str, *, hops: int = 1) -> dict:
-        """Graph traversal from an entity."""
+    async def graph(self, entity_name: str, *, hops: int = 1) -> dict:  # noqa: ARG002
+        """Graph traversal from an entity (multi-hop planned for future)."""
         entity = await self.store.get_entity_by_name(entity_name)
         if not entity:
             return {"entity": None, "relations": [], "neighbors": []}

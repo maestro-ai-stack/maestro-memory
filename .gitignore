@@ -6,3 +6,8 @@ dist/
 src/maestro_memory.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# 本地数据 — 不提交
+evals/results/
+.npm-cache/
+*.db

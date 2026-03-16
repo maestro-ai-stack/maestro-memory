@@ -18,7 +18,8 @@ dependencies = [
 local = ["sentence-transformers>=3.0"]
 openai = ["openai>=1.40"]
 anthropic = ["anthropic>=0.34"]
-all = ["maestro-memory[local]", "maestro-memory[openai]", "maestro-memory[anthropic]"]
+chinese = ["jieba>=0.42"]
+all = ["maestro-memory[local]", "maestro-memory[openai]", "maestro-memory[anthropic]", "maestro-memory[chinese]"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4"]
 
 [project.scripts]
@@ -27,6 +28,7 @@ mmem = "maestro_memory.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/maestro_memory"]
+artifacts = ["src/maestro_memory/py.typed"]
 
 [tool.ruff]
 line-length = 120

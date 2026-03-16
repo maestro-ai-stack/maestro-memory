@@ -1,7 +1,6 @@
 """Tests for retrieval components: BM25, temporal, fusion, embedding."""
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -41,15 +40,15 @@ async def test_bm25_no_results(store: Store) -> None:
 # ── Temporal ──────────────────────────────────────────────────────────────
 
 def test_temporal_score_fresh() -> None:
-    """A recently-created fact should score close to its importance."""
+    """ACT-R: fresh fact with access_count=0 → sigmoid(0) * importance."""
     now = datetime.now()
     fact = Fact(
         id=1, content="fresh", importance=0.8,
         valid_from=now.isoformat(), created_at=now.isoformat(),
     )
     score = temporal_score(fact, as_of=now)
-    # exp(-0.01 * 0) = 1.0, so score ~ 0.8
-    assert score == pytest.approx(0.8, abs=0.05)
+    # B = ln(1) - 0.5*ln(1) = 0, sigmoid(0) = 0.5, score = 0.4
+    assert score == pytest.approx(0.4, abs=0.05)
 
 
 def test_temporal_score_old() -> None:
@@ -60,9 +59,11 @@ def test_temporal_score_old() -> None:
         id=1, content="old", importance=0.8,
         valid_from=old.isoformat(), created_at=old.isoformat(),
     )
-    score = temporal_score(fact, as_of=now)
-    expected = 0.8 * math.exp(-0.01 * 100)
-    assert score == pytest.approx(expected, abs=0.01)
+    fresh_fact = Fact(
+        id=2, content="fresh", importance=0.8,
+        valid_from=now.isoformat(), created_at=now.isoformat(),
+    )
+    assert temporal_score(fact, as_of=now) < temporal_score(fresh_fact, as_of=now)
 
 
 def test_temporal_filter_current() -> None:

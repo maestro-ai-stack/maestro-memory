@@ -1,0 +1,176 @@
+[
+  {
+    "id": "multiturn",
+    "name": "Multi-turn Extraction",
+    "setup": [
+      "mmem add 'Project Alpha launched on March 1, budget $200K, lead: Sarah Chen'",
+      "mmem add 'Alpha milestone 1 completed March 5, on budget'",
+      "mmem add 'Alpha hit blocker March 8: vendor API rate limit, switched to batch processing'",
+      "mmem add 'Alpha milestone 2 delayed to March 15 due to API issue'",
+      "mmem add 'Alpha back on track March 12, new ETA March 18 for final delivery'"
+    ],
+    "query": "Give me a complete status summary of Project Alpha including timeline, budget, blockers, and current status. Be specific with dates.",
+    "assertions": [
+      "Mentions budget $200K",
+      "Mentions Sarah Chen as lead",
+      "Mentions API rate limit as blocker",
+      "Mentions March 18 as current ETA",
+      "Mentions batch processing as solution"
+    ]
+  },
+  {
+    "id": "crm",
+    "name": "CRM Extraction",
+    "setup": [
+      "mmem add --type observation 'Alice Wang from Acme Corp, deal worth $50K, stage: negotiation, next action: send proposal by Friday'",
+      "mmem add --type observation 'Bob Lee from Beta Inc, deal $20K, stage: closed-won, signed March 10'",
+      "mmem add --type observation 'Carol Zhang from Gamma Ltd, deal $80K, stage: discovery, first meeting scheduled March 20'",
+      "mmem add --type observation 'Alice Wang update: Acme deal increased to $75K after adding enterprise tier'",
+      "mmem add --type observation 'Bob Lee churned from Beta Inc, contract cancelled March 15, reason: budget cuts'"
+    ],
+    "query": "List all active deals in the pipeline with their current status, amounts, and next steps. Exclude any churned or cancelled deals.",
+    "assertions": [
+      "Includes Acme Corp with $75K (not $50K)",
+      "Excludes Beta Inc (churned)",
+      "Includes Gamma Ltd $80K",
+      "Mentions Alice Wang's proposal deadline",
+      "Mentions Carol Zhang's March 20 meeting"
+    ]
+  },
+  {
+    "id": "calendar",
+    "name": "Calendar Scheduling",
+    "setup": [
+      "mmem add 'Team standup every Monday Wednesday Friday 10am, room 301'",
+      "mmem add 'Dentist appointment March 20 at 2pm, Dr. Li clinic'",
+      "mmem add 'Client demo March 20 at 3pm with Acme Corp, need projector'",
+      "mmem add 'Lunch with mentor March 21 at 12pm, restaurant TBD'",
+      "mmem add 'Update: client demo moved from March 20 to March 22 at 3pm per client request'"
+    ],
+    "query": "What do I have scheduled on March 20? Are there any time conflicts? Also tell me about the client demo.",
+    "assertions": [
+      "Lists standup at 10am (if Wednesday/Friday)",
+      "Lists dentist at 2pm",
+      "Does NOT list client demo on March 20 (it was moved)",
+      "Mentions client demo is now March 22",
+      "No time conflicts on March 20"
+    ]
+  },
+  {
+    "id": "travel",
+    "name": "Travel Planning",
+    "setup": [
+      "mmem add --type preference 'Travel preferences: window seat, vegetarian meals, budget max $3000'",
+      "mmem add --type preference 'Allergic to shellfish, must avoid seafood restaurants'",
+      "mmem add 'Japan trip itinerary: Tokyo March 15-20, staying at Hotel Sunrise Shinjuku'",
+      "mmem add 'Japan trip: Osaka March 20-23, staying at Namba Grand'",
+      "mmem add 'Must visit: Tsukiji outer market in Tokyo, Dotonbori in Osaka'",
+      "mmem add 'Update: Tokyo hotel changed to Park Hyatt Shinjuku, upgrade from company'"
+    ],
+    "query": "Plan my dining for the Japan trip. What are my dietary restrictions? Which restaurants or food areas should I visit and where am I staying?",
+    "assertions": [
+      "Mentions vegetarian preference",
+      "Mentions shellfish allergy",
+      "Mentions Tsukiji market",
+      "Mentions Dotonbori",
+      "Mentions Park Hyatt (not Hotel Sunrise)",
+      "Mentions Namba Grand for Osaka"
+    ]
+  },
+  {
+    "id": "patient",
+    "name": "Patient Records",
+    "setup": [
+      "mmem add 'Patient: John Doe, 45M. Chief complaint: persistent headache for 3 days, onset gradual, no fever'",
+      "mmem add 'John Doe vitals: BP 140/90, HR 78, Temp 36.8C. History: hypertension, on lisinopril 10mg daily'",
+      "mmem add 'John Doe assessment: tension-type headache. Plan: ibuprofen 400mg TID x 5 days, follow-up 1 week'",
+      "mmem add 'John Doe follow-up March 12: headache resolved. New complaint: intermittent dizziness past 2 days'",
+      "mmem add 'John Doe March 12 assessment: possible medication side effect. Switched lisinopril to losartan 50mg. Recheck BP in 2 weeks'"
+    ],
+    "query": "What is John Doe's current medication regimen and active symptoms? What was changed at the last visit and why?",
+    "assertions": [
+      "Current med: losartan 50mg (not lisinopril)",
+      "Active symptom: dizziness (not headache)",
+      "Headache resolved",
+      "Switch reason: possible medication side effect",
+      "BP recheck in 2 weeks"
+    ]
+  },
+  {
+    "id": "hr",
+    "name": "HR Candidate Tracking",
+    "setup": [
+      "mmem add 'Candidate: Emily Chen, 8 years Python/Go, applied Senior Backend Engineer. Resume highlights: distributed systems at Stripe, OSS contributor'",
+      "mmem add 'Emily Chen phone screen (March 5): strong system design, articulate, asked good questions about team culture. Weakness: limited Kubernetes experience'",
+      "mmem add 'Emily Chen onsite round 1 (March 10): coding excellent, solved graph problem in O(n). Interviewer: Mike recommends hire'",
+      "mmem add 'Emily Chen onsite round 2 (March 10): system design solid, designed rate limiter with token bucket. Minor gap: monitoring/observability'",
+      "mmem add 'Emily Chen decision: extend offer. Competing offer from Datadog. Need to move fast, compensation committee approved $180K + equity'"
+    ],
+    "query": "Summarize Emily Chen's interview journey, strengths, weaknesses, and current offer status. What should we be aware of?",
+    "assertions": [
+      "Mentions Stripe background",
+      "Mentions K8s weakness",
+      "Mentions competing Datadog offer",
+      "Mentions $180K compensation",
+      "Mentions need to move fast",
+      "Mentions Mike's recommendation"
+    ]
+  },
+  {
+    "id": "paper",
+    "name": "Paper Management",
+    "setup": [
+      "mmem add 'Paper: Attention Is All You Need (Vaswani et al. 2017). Key contribution: transformer architecture with self-attention replacing RNNs. Citation count: 120K+'",
+      "mmem add 'Paper: BERT (Devlin et al. 2019). Bidirectional pre-training on transformers. Introduced masked language modeling. Built on Vaswani 2017'",
+      "mmem add 'Paper: GPT-3 (Brown et al. 2020). 175B parameter autoregressive LM. Key finding: few-shot learning emerges at scale without fine-tuning'",
+      "mmem add 'Paper: Graphiti (Zep, 2025). Temporal knowledge graph for agent memory. Bi-temporal model with episode-to-entity consolidation. Uses Neo4j'",
+      "mmem add 'Research note: Graphiti approach is most relevant to our memory architecture but we chose SQLite over Neo4j for zero-infra constraint'"
+    ],
+    "query": "What papers have I read about memory and knowledge representation? How do they relate to each other? What design decisions did we make based on them?",
+    "assertions": [
+      "Mentions Graphiti paper",
+      "Mentions transformer lineage (Vaswani -> BERT -> GPT-3)",
+      "Mentions SQLite over Neo4j decision",
+      "Mentions zero-infrastructure constraint",
+      "Connects Graphiti to our memory architecture"
+    ]
+  },
+  {
+    "id": "research",
+    "name": "Research Auto-Search",
+    "setup": [
+      "mmem add --type decision 'Research question: Does ACT-R activation improve retrieval over simple Ebbinghaus decay?'",
+      "mmem add 'Finding: Ebbinghaus curve R(t)=e^(-t/S) is too aggressive for agent memory. 100-day-old facts essentially invisible'",
+      "mmem add 'Finding: ACT-R base-level activation B=ln(n+1)-0.5*ln(d+1) balances recency and frequency naturally'",
+      "mmem add 'Dead end: tried frequency-only boosting, but rarely-accessed important facts get buried'",
+      "mmem add 'Conclusion: ACT-R with importance weighting is the best approach. Implemented as score = importance * sigmoid(A)'"
+    ],
+    "query": "What is the current state of our research on memory decay models? What did we try, what failed, and what did we conclude?",
+    "assertions": [
+      "Mentions Ebbinghaus limitation (too aggressive)",
+      "Mentions ACT-R as chosen approach",
+      "Mentions frequency-only as dead end",
+      "Mentions importance weighting",
+      "Mentions sigmoid function"
+    ]
+  },
+  {
+    "id": "workproject",
+    "name": "Work Project from Chat",
+    "setup": [
+      "mmem add 'hey deploy is blocked bc jenkins down, @mike looking into it, eta 2hrs'",
+      "mmem add 'update: jenkins back, deploy succeeded to staging. monitoring for 30min before prod'",
+      "mmem add 'staging looks good, all health checks green. pushing to prod now'",
+      "mmem add 'prod deploy done. but seeing elevated p99 latency on /api/search endpoint, 800ms vs normal 200ms'",
+      "mmem add 'root cause found: new search index not warmed up. cache warming job kicked off, eta 1hr to normalize'"
+    ],
+    "query": "What happened with today's deployment? What issues came up and what is the current status?",
+    "assertions": [
+      "Mentions Jenkins outage as initial blocker",
+      "Mentions successful deployment to prod",
+      "Mentions p99 latency issue on /api/search",
+      "Mentions cache warming as fix",
+      "Mentions 1hr ETA for normalization"
+    ]
+  }
+]

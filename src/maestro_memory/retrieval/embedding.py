@@ -43,16 +43,45 @@ class LocalEmbeddingProvider(EmbeddingProvider):
         return embedding.astype(np.float32)
 
 
+class BGEEmbeddingProvider(EmbeddingProvider):
+    """BGE-M3 多语言嵌入，懒加载。"""
+
+    def __init__(self) -> None:
+        self._model = None
+
+    def _load_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer("BAAI/bge-m3")
+
+    async def embed(self, text: str) -> ndarray | None:
+        self._load_model()
+        assert self._model is not None
+        embedding = self._model.encode(text, convert_to_numpy=True)
+        return embedding.astype(np.float32)
+
+
+# ── 工厂函数 ──────────────────────────────────────────────
+
+_MODEL_PROVIDERS: dict[str, type[EmbeddingProvider]] = {
+    "bge-m3": BGEEmbeddingProvider,
+    "all-MiniLM-L6-v2": LocalEmbeddingProvider,
+}
+
+
 def get_embedding_provider(provider: str = "local", model: str = "all-MiniLM-L6-v2") -> EmbeddingProvider:
     """Factory: return the best available provider, gracefully falling back."""
-    if provider == "local":
-        try:
-            import sentence_transformers as _st  # noqa: F401
-            _ = _st
-            return LocalEmbeddingProvider(model)
-        except ImportError:
-            return NullEmbeddingProvider()
-    return NullEmbeddingProvider()
+    if provider != "local":
+        return NullEmbeddingProvider()
+    try:
+        import sentence_transformers as _st  # noqa: F401
+        _ = _st
+    except ImportError:
+        return NullEmbeddingProvider()
+    cls = _MODEL_PROVIDERS.get(model)
+    if cls is BGEEmbeddingProvider:
+        return BGEEmbeddingProvider()
+    return LocalEmbeddingProvider(model)
 
 
 def cosine_similarity(a: ndarray, b: ndarray) -> float:

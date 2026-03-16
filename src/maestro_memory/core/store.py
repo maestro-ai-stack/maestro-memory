@@ -8,6 +8,7 @@ import aiosqlite
 
 from maestro_memory.core.models import Entity, Episode, Fact, Relation
 from maestro_memory.core.schema import get_schema
+from maestro_memory.retrieval.tokenizer import segment
 
 
 class Store:
@@ -62,10 +63,10 @@ class Store:
         )
         await self.db.commit()
         eid = cur.lastrowid
-        # sync FTS
+        # sync FTS（中文分词后写入）
         await self.db.execute(
             "INSERT INTO entities_fts (rowid, name, summary) VALUES (?, ?, ?)",
-            (eid, name, summary),
+            (eid, segment(name), segment(summary)),
         )
         await self.db.commit()
         return eid  # type: ignore[return-value]
@@ -102,7 +103,7 @@ class Store:
         if row:
             await self.db.execute(
                 "INSERT INTO entities_fts (rowid, name, summary) VALUES (?, ?, ?)",
-                (entity_id, row["name"], summary),
+                (entity_id, segment(row["name"]), segment(summary)),
             )
         await self.db.commit()
 
@@ -148,8 +149,8 @@ class Store:
         )
         await self.db.commit()
         fid = cur.lastrowid
-        # sync FTS
-        await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fid, content))
+        # sync FTS（中文分词后写入）
+        await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fid, segment(content)))
         await self.db.commit()
         return fid  # type: ignore[return-value]
 
@@ -160,9 +161,9 @@ class Store:
 
     async def update_fact(self, fact_id: int, content: str) -> None:
         await self.db.execute("UPDATE facts SET content = ? WHERE id = ?", (content, fact_id))
-        # sync FTS
+        # sync FTS（中文分词后写入）
         await self.db.execute("DELETE FROM facts_fts WHERE rowid = ?", (fact_id,))
-        await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fact_id, content))
+        await self.db.execute("INSERT INTO facts_fts (rowid, content) VALUES (?, ?)", (fact_id, segment(content)))
         await self.db.commit()
 
     async def invalidate_fact(self, fact_id: int) -> None:

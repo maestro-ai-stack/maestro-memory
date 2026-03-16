@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Skills Ecosystem](https://img.shields.io/badge/skills-ecosystem-blueviolet)](https://github.com/anthropics/skills)
 
-Temporal hybrid memory for AI agents. Combines BM25 keyword search, embedding similarity, knowledge graph traversal, and temporal decay -- all in a single SQLite file. Zero infrastructure, zero config, zero API keys required.
+Cognitive-inspired memory for AI agents. Three-layer architecture modeled on human memory: working memory (context window), short-term memory (post-conversation extraction), and long-term memory (periodic consolidation with adaptive forgetting). Combines BM25 keyword search, embedding similarity, knowledge graph traversal, and ACT-R activation decay -- all in a single SQLite file. Zero infrastructure, zero config, zero API keys required.
 
 ---
 
@@ -72,19 +72,27 @@ DB size:   28.0 KB
 ## Architecture
 
 ```
-CLI / SDK / Skill
-      |
+Working Memory (context window, LLM native)
+      |  mmem search --> inject ~4 chunks
+      v
+Short-term Memory (synaptic consolidation)
+      |  Stop hook --> transcript extract --> mmem add
+      v
+Long-term Memory (systems consolidation)
+      |  mmem consolidate --> chunk + dedup + extract + store
       v
   Memory Facade
       |
       +-- Ingestion Pipeline
+      |     chunking (tiktoken 256t) --> dedup (hash+cosine)
       |     LLM extraction (optional) --> fallback (raw storage)
+      |     OCR (GLM-OCR via ollama, optional)
       |
       +-- Query Engine
-      |     1. BM25 (FTS5)        --> sparse scores
-      |     2. Embedding (cosine)  --> dense scores
-      |     3. Graph walk          --> relationship scores
-      |     4. RRF fusion          + temporal decay
+      |     1. BM25 (FTS5 + jieba)  --> sparse scores
+      |     2. Embedding (BGE-M3)   --> dense scores
+      |     3. Graph walk            --> relationship scores
+      |     4. RRF fusion            + ACT-R activation decay
       |     5. Return top-k
       |
       +-- Storage Layer
@@ -123,6 +131,15 @@ mmem search "python" --limit 5                           # limit results
 mmem graph --entity "maestro-fetch"                      # entity details + relations
 mmem graph --list-entities                               # list all entities
 mmem graph --list-relations                              # list all relations
+```
+
+### Consolidate (batch ingest)
+
+```bash
+mmem consolidate ~/progress/*/notes.md                   # ingest markdown files
+mmem consolidate ~/.claude/projects/*/memory/*.md         # ingest Claude memory files
+mmem consolidate ~/docs/*.pdf ~/screenshots/*.png         # PDF + images (GLM-OCR)
+mmem consolidate ~/data/ --dry-run                        # preview without writing
 ```
 
 ### Status and config

@@ -14,6 +14,8 @@ def add_cmd(
     fact_type: str = typer.Option("observation", "--type", "-t", help="Fact type: observation|preference|feedback|decision"),
     source: str = typer.Option("manual", "--source", "-s", help="Source type: manual|conversation|file|git"),
     importance: float = typer.Option(0.5, "--importance", "-i", help="Importance score 0.0-1.0"),
+    entity: Optional[str] = typer.Option(None, "--entity", "-e", help="Attach to entity (auto-created if new)"),
+    entity_type: str = typer.Option("concept", "--entity-type", help="Entity type: person|project|tool|concept"),
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="Ingest content from file"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
 ) -> None:
@@ -31,12 +33,13 @@ def add_cmd(
         typer.echo("Provide content or --file", err=True)
         raise typer.Exit(1)
 
-    asyncio.run(_add(text, fact_type, source, source_ref, importance, project))
+    asyncio.run(_add(text, fact_type, source, source_ref, importance, entity, entity_type, project))
 
 
 async def _add(
     content: str, fact_type: str, source: str,
-    source_ref: str | None, importance: float, project: str | None,
+    source_ref: str | None, importance: float,
+    entity_name: str | None, entity_type: str, project: str | None,
 ) -> None:
     mem = Memory(project=project)
     await mem.init()
@@ -47,6 +50,8 @@ async def _add(
             source_ref=source_ref,
             fact_type=fact_type,
             importance=importance,
+            entity_name=entity_name,
+            entity_type=entity_type,
         )
         typer.echo(f"Episode #{result.episode_id} stored.")
         typer.echo(f"  facts added={result.facts_added} updated={result.facts_updated} "

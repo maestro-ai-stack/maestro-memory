@@ -35,15 +35,25 @@ class Memory:
         source_ref: str | None = None,
         fact_type: str = "observation",
         importance: float = 0.5,
+        entity_name: str | None = None,
+        entity_type: str = "concept",
     ) -> AddResult:
-        """Ingest content into memory."""
+        """Ingest content into memory.
+
+        Agent 可以直接指定 entity_name，跳过 LLM 提取。
+        """
         episode_id = await self.store.add_episode(content, source_type, source_ref)
 
-        # Try LLM extraction first, then fallback
-        existing = await self.store.list_entities()
-        operations = await llm_extract(content, existing)
-        if not operations:
-            operations = await fallback_extract(content)
+        # Agent 直传实体 → 跳过 LLM 提取
+        if entity_name:
+            operations = [{"op": "ADD", "fact": content, "entity": entity_name,
+                          "entity_type": entity_type, "type": fact_type, "importance": importance}]
+        else:
+            # Try LLM extraction first, then fallback
+            existing = await self.store.list_entities()
+            operations = await llm_extract(content, existing)
+            if not operations:
+                operations = await fallback_extract(content)
 
         result = AddResult(episode_id=episode_id)
 

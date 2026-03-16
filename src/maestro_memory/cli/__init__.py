@@ -6,6 +6,7 @@ from maestro_memory.cli.add import add_cmd
 from maestro_memory.cli.config import config_app
 from maestro_memory.cli.consolidate import consolidate_cmd
 from maestro_memory.cli.graph import graph_cmd
+from maestro_memory.cli.relate import relate_cmd
 from maestro_memory.cli.search import search_cmd
 from maestro_memory.cli.status import status_cmd
 
@@ -13,6 +14,7 @@ app = typer.Typer(name="mmem", help="maestro-memory: temporal hybrid memory for 
 
 app.command("search")(search_cmd)
 app.command("add")(add_cmd)
+app.command("relate")(relate_cmd)
 app.command("consolidate")(consolidate_cmd)
 app.command("graph")(graph_cmd)
 app.command("status")(status_cmd)

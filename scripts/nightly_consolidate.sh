@@ -15,18 +15,20 @@
 
 set -euo pipefail
 
+# Ensure homebrew and pip-installed binaries are on PATH (cron has minimal PATH)
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SESSIONS_DIR="$HOME/.claude/projects"
 VENV="$SCRIPT_DIR/../.venv/bin/python"
-MMEM="$HOME/.local/bin/mmem"
 
-# Fallback to global mmem if venv not available
+# Fallback to global python if venv not available
 if [ ! -f "$VENV" ]; then
     VENV="python3"
 fi
 
 if ! command -v mmem &>/dev/null; then
-    echo "[$(date)] mmem not found on PATH, skipping consolidation"
+    echo "[$(date)] mmem not found on PATH ($PATH), skipping consolidation"
     exit 0
 fi
 

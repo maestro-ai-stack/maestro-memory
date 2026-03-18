@@ -1,6 +1,9 @@
 ---
 name: maestro-memory
-description: "Business knowledge graph for AI agents. Stores prospect intel, dataset experience, domain expertise, client interactions, and business decisions — NOT code architecture. Dual system with Claude auto-memory: auto-memory = collaboration HOW, mmem = business WHAT. Triggers: remember, recall, memory, search memory, prospect, dataset, client, domain knowledge, entity relationship, who works on, what did we learn, pricing, business decision."
+description: |
+  Store and retrieve business knowledge (prospects, datasets, domain expertise) via mmem CLI.
+  Triggers: mmem, remember, recall, prospect, dataset memory, entity, 记忆, 知识图谱.
+  Do NOT use for: collaboration preferences → auto-memory in CLAUDE.md.
 ---
 
 # maestro-memory — Business Brain

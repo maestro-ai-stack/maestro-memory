@@ -11,3 +11,7 @@ src/maestro_memory.egg-info/
 evals/results/
 .npm-cache/
 *.db
+.env*
+.DS_Store
+*.sqlite
+*.sqlite3

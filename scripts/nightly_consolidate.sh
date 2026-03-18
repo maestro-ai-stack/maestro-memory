@@ -4,7 +4,7 @@
 #
 # Install as cron:
 #   crontab -e
-#   0 3 * * * /Users/ding/maestro/projects/maestro-memory/scripts/nightly_consolidate.sh >> /tmp/mmem-nightly.log 2>&1
+#   0 3 * * * $HOME/maestro-memory/scripts/nightly_consolidate.sh >> /tmp/mmem-nightly.log 2>&1
 #
 # What it does:
 # 1. Find session files modified in the last 24 hours

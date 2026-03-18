@@ -41,8 +41,10 @@ def parse_frontmatter(text: str) -> dict:
 
 def extract_project_name(project_dir: str) -> str:
     """Extract a readable project name from the Claude project hash dir."""
-    # -Users-ding-maestro-projects-maestro -> maestro-projects-maestro
-    name = project_dir.replace("-Users-ding-", "").replace("-", "/")
+    # Strip the home directory prefix that Claude Code uses for project hashing
+    # e.g. -Users-alice-projects-myapp -> projects-myapp -> projects/myapp
+    home_prefix = f"-{Path.home().as_posix().replace('/', '-')}-"
+    name = project_dir.replace(home_prefix, "").replace("-", "/")
     # Take last 2 segments
     parts = name.split("/")
     return "/".join(parts[-2:]) if len(parts) > 1 else parts[-1]
@@ -99,45 +101,35 @@ async def ingest_memory_files(mem: Memory, dry_run: bool = False) -> int:
 
 
 async def ingest_current_session_facts(mem: Memory, dry_run: bool = False) -> int:
-    """Manually curated facts from the current session (maestro-fetch + maestro-memory design)."""
-    facts = [
-        # User preferences
-        ("user", "person", "preference", "Prefers CLI + Skill over MCP for tool distribution", 0.8),
-        ("user", "person", "preference", "Wants autonomous execution: 'do it yourself, I'll check results tonight'", 0.7),
-        ("user", "person", "preference", "Always prefix replies with 'Yes Minister'", 0.9),
-        ("user", "person", "preference", "English by default, Chinese only when explicitly asked", 0.8),
-        ("user", "person", "preference", "Annotate hard words (IELTS 6+) inline with short explanation", 0.7),
-        ("user", "person", "feedback", "Do not use MCP servers — use CLI + Skill instead", 0.9),
+    """Ingest manually curated facts from a config file or inline list.
 
-        # maestro-fetch decisions
-        ("maestro-fetch", "project", "decision", "v0.2.0 architecture: src/ layout, pluggable browser backends (CDP/bb-browser/Cloudflare/Playwright), community source adapters, SQLite cache with TTL", 0.8),
-        ("maestro-fetch", "project", "decision", "Distribution: pip install + npx skills add + /plugin marketplace add", 0.7),
-        ("maestro-fetch", "project", "decision", "CLI design: noun-verb subcommands (mfetch fetch/source/session/cache/config)", 0.6),
-        ("maestro-fetch", "project", "decision", "bb-browser is complementary, not competing — pluggable browser backend", 0.7),
-        ("maestro-fetch", "project", "decision", "Community source adapters in separate repo: maestro-ai-stack/maestro-fetch-sources", 0.6),
-        ("maestro-fetch", "project", "decision", "Removed all MCP servers from settings.json — CLI + Skill only", 0.8),
-        ("maestro-fetch", "project", "observation", "Added CDP backend: mfetch --cdp connects to running Chrome port 9222", 0.6),
+    To use: create a file at scripts/facts.py containing a list of tuples:
+        FACTS = [
+            # (entity_name, entity_type, fact_type, content, importance)
+            ("my-project", "project", "decision", "Chose SQLite for storage", 0.8),
+            ("some-tool", "tool", "observation", "Supports REST API", 0.5),
+        ]
 
-        # maestro-memory decisions
-        ("maestro-memory", "project", "decision", "v0.1.0 architecture: SQLite single-file, FTS5 BM25 + numpy embeddings + graph traversal, RRF fusion + ACT-R temporal activation", 0.8),
-        ("maestro-memory", "project", "decision", "Borrows from: Graphiti (temporal), mem0 (extraction), Letta (tiers), OpenViking (hierarchy), nano-graphrag (simplicity)", 0.7),
-        ("maestro-memory", "project", "decision", "Zero-config: works without LLM API key (BM25 only) and without sentence-transformers", 0.7),
-        ("maestro-memory", "project", "decision", "Chinese support: jieba segmentation for BM25, BGE-M3 for multilingual embeddings", 0.6),
+    Or define facts inline below for quick testing.
+    """
+    # Example facts for testing — replace with your own
+    # facts = [
+    #     ("my-project", "project", "decision", "Your project decision here", 0.8),
+    #     ("some-tool", "tool", "observation", "Tool observation here", 0.5),
+    # ]
 
-        # Organization
-        ("maestro-ai-stack", "project", "observation", "GitHub organization for open-source maestro tools: maestro-fetch, maestro-fetch-sources, maestro-memory", 0.6),
-
-        # Tool relationships
-        ("maestro-fetch", "project", "observation", "maestro-fetch = agent perception layer (fetch external data)", 0.7),
-        ("maestro-memory", "project", "observation", "maestro-memory = agent memory layer (store, retrieve, temporal reasoning)", 0.7),
-
-        # Research findings
-        ("bb-browser", "tool", "observation", "Chrome extension + CDP, real browser login state, 100+ JS site adapters, by Epiral org", 0.5),
-        ("Cloudflare Browser Rendering", "tool", "observation", "REST API, free tier 10min/day, /markdown and /crawl endpoints, natural anti-bot advantage", 0.5),
-        ("MiroFish", "tool", "observation", "Multi-agent prediction engine by 郭航江, 27k stars, 30M RMB investment from Chen Tianqiao, uses Zep Cloud for agent memory", 0.5),
-        ("OpenViking", "tool", "observation", "ByteDance filesystem paradigm for agent context, viking:// protocol, L0/L1/L2 tiered loading", 0.5),
-        ("Graphiti", "tool", "observation", "Zep's temporal knowledge graph: dual timestamps, validity windows, fact invalidation, hybrid BM25+vector+graph retrieval", 0.5),
-    ]
+    # Try loading from external config file first
+    facts_file = Path(__file__).parent / "facts.py"
+    if facts_file.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("facts", facts_file)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        facts = getattr(mod, "FACTS", [])
+    else:
+        print("[INFO] No scripts/facts.py found. Skipping session facts.")
+        print("[INFO] Create scripts/facts.py with a FACTS list to ingest custom facts.")
+        return 0
 
     count = 0
     for entity_name, entity_type, fact_type, content, importance in facts:
@@ -147,7 +139,7 @@ async def ingest_current_session_facts(mem: Memory, dry_run: bool = False) -> in
             await mem.add(
                 content,
                 source_type="conversation",
-                source_ref="session-2026-03-16-maestro-fetch-memory-design",
+                source_ref="bulk-ingest-session-facts",
                 fact_type=fact_type,
                 entity_name=entity_name,
                 entity_type=entity_type,

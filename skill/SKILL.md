@@ -48,7 +48,7 @@ Claude auto-memory handles collaboration preferences — mmem handles everything
 | `prospect` | Academic clients, potential clients | Prof Srisuma, Prof Huang |
 | `dataset` | Data products, external datasets | era5, china-county-crosswalk |
 | `project` | Business units, initiatives | ra-data, maestro-creative |
-| `person` | Team members, collaborators | Li Ding, Ao Wang |
+| `person` | Team members, collaborators | Alice, Bob |
 | `method` | Econometric/statistical methods | DiD, IV-2SLS, BLP |
 | `tool` | Software, platforms | Supabase, GEE |
 

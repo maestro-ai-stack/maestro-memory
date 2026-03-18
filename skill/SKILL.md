@@ -1,167 +1,90 @@
 ---
 name: maestro-memory
-description: "Cognitive-inspired memory for AI agents. Three-layer architecture: working memory (context), short-term (post-conversation), long-term (consolidation). Use when: agent needs to remember facts, build entity relationships, recall user preferences, query past decisions, batch-ingest files, or reason about what was true at a specific time. Triggers: remember, recall, memory, search memory, what did, user preference, project history, knowledge graph, entity relationship, temporal, as of, when did, consolidate, relate, who works on."
+description: "Business knowledge graph for AI agents. Stores prospect intel, dataset experience, domain expertise, client interactions, and business decisions — NOT code architecture. Dual system with Claude auto-memory: auto-memory = collaboration HOW, mmem = business WHAT. Triggers: remember, recall, memory, search memory, prospect, dataset, client, domain knowledge, entity relationship, who works on, what did we learn, pricing, business decision."
 ---
 
-# maestro-memory
+# maestro-memory — Business Brain
 
-Cognitive-inspired memory with BM25 (CN+EN) + embedding + knowledge graph + ACT-R activation decay. Single SQLite file, zero API keys.
+mmem stores **business/domain knowledge** that dies with the session if not saved.
+Claude auto-memory handles collaboration preferences — mmem handles everything else.
 
-## Setup
+## The Split
 
-### Install
+| System | Stores | Example |
+|--------|--------|---------|
+| **Auto-memory** | HOW to collaborate | "don't summarize, I read diffs" |
+| **mmem** | WHAT we know about the world | "Prof Srisuma needs auction data" |
 
-```bash
-pip install maestro-memory                    # from PyPI
-# or from source:
-pip install -e ~/maestro-memory               # editable local install
-```
+## Mandatory Triggers
 
-### Verify
+### WRITE triggers (`mmem add` before reply ends)
 
-```bash
-mmem status                                   # should show DB path + stats
-mmem add "test fact" && mmem search "test"    # round-trip check
-```
+| Trigger | Entity type | Command |
+|---------|-------------|---------|
+| Learn prospect info | `prospect` | `mmem add --entity-name "Prof X" --entity-type prospect "research focus: auction theory, needs bidding data"` |
+| Dataset lesson | `dataset` | `mmem add --entity-name "era5" --entity-type dataset "hourly data has gaps pre-1979"` |
+| Business decision | `project` | `mmem add --entity-name "ra-data" --entity-type project --type decision "pricing: $800 → $1200 for L2 tier"` |
+| Client interaction | `prospect` | `mmem add --entity-name "Prof X" --entity-type prospect "replied 2026-03-16, wants meeting next week"` |
+| Domain insight | (general) | `mmem add --type observation "DiD with staggered treatment: use Sun & Abraham 2021"` |
+| Entity relationship | — | `mmem relate "Prof X" "collaborates_with" "Prof Y" --subject-type prospect --object-type prospect` |
 
-### Optional: Stop hook for short-term memory
+### READ triggers (`mmem search` before acting)
 
-Add to `~/.claude/settings.json` under `hooks.Stop`:
+| Situation | Command |
+|-----------|---------|
+| About to draft cold email | `mmem search "prospect name"` |
+| About to work on a dataset | `mmem search "dataset name"` |
+| Discussing RA Data strategy | `mmem search "ra-data"` |
+| User mentions prior decision | `mmem search "topic"` |
+| Before research on a person | `mmem graph --entity "name"` |
 
-```json
-{
-  "type": "command",
-  "command": "bash ~/maestro-memory/scripts/memory-save.sh",
-  "timeout": 10000
-}
-```
+## Entity Types
 
-This auto-extracts conversation highlights after each session.
-
-### Optional: BGE-M3 embeddings
-
-```bash
-pip install maestro-memory[local]             # installs sentence-transformers
-# edit ~/.maestro/memory/config.toml:
-# [embedding]
-# model = "bge-m3"
-```
-
-### Optional: Chinese FTS5
-
-```bash
-pip install maestro-memory[chinese]           # installs jieba
-# auto-detected, no config needed
-```
-
----
-
-## Two Usage Modes
-
-### Mode 1: Short-term Memory (within conversation)
-
-The agent uses `mmem` CLI via **Bash tool** during the conversation. This is the primary mode.
-
-**When to search** (Bash tool → `mmem search`):
-- User mentions prior conversations/decisions ("last time...", "didn't we...")
-- User mentions unfamiliar project/person/abbreviation
-- Before starting a new task — search for relevant background
-- User explicitly asks to recall/remember something
-
-**When to write** (Bash tool → `mmem add` / `mmem relate`):
-- User gives behavior correction → `mmem add --type feedback "..."`
-- Project milestone or decision → `mmem add --type project "..." --entity "name" --entity-type project`
-- New person/tool/project discovered → `mmem add "..." --entity "X" --entity-type person`
-- Entity relationship → `mmem relate "A" "predicate" "B"`
-- Important fact with high priority → `mmem add "..." --importance 0.9`
-
-**Automatic (Stop hook)**: If configured, `scripts/memory-save.sh` runs after each conversation, extracting the last ~2000 chars of assistant messages into memory as raw conversation type.
-
-### Mode 2: Long-term Memory (batch consolidation)
-
-Periodic deep scan of project files, notes, and session transcripts. Run manually or via cron.
-
-**When to trigger** (user says "consolidate memory", "organize memory", "import notes"):
-
-1. **Identify sources** — ask user or use defaults:
-   ```bash
-   # Claude Code file-based memories
-   ~/.claude/projects/*/memory/*.md
-
-   # Project progress notes
-   ~/progress/*/notes.md
-
-   # Session transcripts (if accessible)
-   ~/.claude/sessions/*/transcript.jsonl
-   ```
-
-2. **Dry-run first** — always preview before writing:
-   ```bash
-   mmem consolidate --dry-run <paths...>
-   ```
-
-3. **Confirm** with user, then execute:
-   ```bash
-   mmem consolidate <paths...>
-   ```
-
-4. **Post-consolidation** — build entity graph from consolidated facts:
-   ```bash
-   # Agent reads mmem search results, identifies entities, builds graph:
-   mmem relate "Project Alpha" "owned_by" "Sarah Chen" --subject-type project --object-type person
-   mmem relate "Sarah Chen" "reports_to" "Li Ding" --subject-type person --object-type person
-   ```
-
-5. **Show stats**:
-   ```bash
-   mmem status
-   mmem graph --list-entities
-   mmem graph --list-relations
-   ```
-
----
+| Type | Use for | Example entities |
+|------|---------|-----------------|
+| `prospect` | Academic clients, potential clients | Prof Srisuma, Prof Huang |
+| `dataset` | Data products, external datasets | era5, china-county-crosswalk |
+| `project` | Business units, initiatives | ra-data, maestro-creative |
+| `person` | Team members, collaborators | Li Ding, Ao Wang |
+| `method` | Econometric/statistical methods | DiD, IV-2SLS, BLP |
+| `tool` | Software, platforms | Supabase, GEE |
 
 ## CLI Reference
 
 ### Search
 ```bash
-mmem search "coding preferences"                      # hybrid search (CN+EN)
-mmem search "tech stack" --current                     # only non-invalidated facts
-mmem search "deadlines" --as-of 2026-03-01             # point-in-time query
-mmem search "query" --limit 5                          # limit results
+mmem search "query"                                        # hybrid (BM25+embedding+graph)
+mmem search "query" --current                              # only valid facts
+mmem search "query" --as-of 2026-03-01                     # point-in-time
+mmem search "query" --limit 5                              # limit results
 ```
 
 ### Add
 ```bash
-mmem add "plain fact"                                                    # observation
-mmem add "fact" --entity "Alice" --entity-type person                    # with entity
-mmem add --type feedback "correction"                                    # behavior
-mmem add --type project "decision" --importance 0.9                      # project
-mmem add --type decision "tech choice"                                   # decision
-mmem add --file ./notes.md                                               # file
+mmem add "fact"                                            # general observation
+mmem add "fact" --entity-name "X" --entity-type prospect   # attach to entity
+mmem add --type feedback "correction"                      # behavior correction
+mmem add --type decision "choice" --importance 0.9         # high-importance decision
+mmem add --file ./notes.md                                 # ingest file
 ```
 
 ### Relate
 ```bash
-mmem relate "Alice" "works_at" "Acme" --subject-type person --object-type concept
-mmem relate "Alpha" "depends_on" "API" --subject-type project --object-type tool
-mmem relate "Alice" "leads" "Alpha" --subject-type person --object-type project
+mmem relate "A" "predicate" "B" --subject-type prospect --object-type prospect
+# predicates: collaborates_with, advises, needs_data, uses_method, works_at, depends_on
 ```
 
 ### Graph
 ```bash
-mmem graph --entity "Alice"          # entity + relations + neighbors
-mmem graph --list-entities           # all entities
-mmem graph --list-relations          # all relations
+mmem graph --entity "Prof X"      # entity + relations + neighbors
+mmem graph --list-entities         # all entities
+mmem graph --list-relations        # all relations
 ```
 
-### Consolidate
+### Consolidate (batch ingest)
 ```bash
-mmem consolidate ~/progress/*/notes.md                 # markdown files
-mmem consolidate ~/.claude/projects/*/memory/*.md       # Claude memory files
-mmem consolidate ~/docs/*.pdf ~/screenshots/*.png       # PDF + images (GLM-OCR)
-mmem consolidate <paths> --dry-run                      # preview only
-mmem consolidate <paths> --project myproject            # scoped DB
+mmem consolidate <paths> --dry-run   # preview first
+mmem consolidate <paths>             # execute
 ```
 
 ### Status
@@ -170,11 +93,27 @@ mmem status                          # DB stats
 mmem config show                     # current config
 ```
 
----
-
 ## Do NOT Store
 
-- Code patterns or file paths — read the code directly
-- Current conversation temp state — use tasks
-- Rules already in CLAUDE.md — no duplication
-- Raw large files — use consolidate with chunking instead of add --file for big docs
+- Code architecture, API routes, schemas — **read the code**
+- Git history, who-changed-what — **use git log**
+- File paths, project structure — **use Glob/Grep**
+- Rules already in CLAUDE.md — **no duplication**
+- Ephemeral task state — **use Tasks/Plans**
+- Tool descriptions already in CLAUDE.md §3 — **no duplication**
+
+## Anti-patterns
+
+```
+BAD:  mmem add --entity-name "ra/suite" --entity-type project "API route: /api/ra/projects"
+WHY:  Code-derivable. Read the file instead.
+
+BAD:  mmem add "User prefers English by default"
+WHY:  Already in CLAUDE.md PRE-FLIGHT. Use auto-memory for collaboration style.
+
+GOOD: mmem add --entity-name "Prof Srisuma" --entity-type prospect "replied to cold email, asked about auction data, status: warm lead"
+WHY:  Business intel that can't be read from any file.
+
+GOOD: mmem add --entity-name "china-crop-phenology" --entity-type dataset "NBS yearbook pre-2000 has province-level only, county starts 2000"
+WHY:  Dataset experience learned through painful debugging, not documented anywhere.
+```

@@ -106,11 +106,13 @@ class Memory:
         limit: int = 10,
         current_only: bool = True,
         as_of: str | None = None,
+        rerank: bool = True,
     ) -> list[SearchResult]:
-        """Hybrid search pipeline."""
+        """Hybrid search pipeline with optional cross-encoder reranking."""
         return await hybrid_search(
             self.store, query, self._embedding_provider,
             limit=limit, current_only=current_only, as_of=as_of,
+            rerank=rerank,
         )
 
     async def graph(self, entity_name: str, *, hops: int = 1) -> dict:  # noqa: ARG002

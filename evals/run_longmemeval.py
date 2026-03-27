@@ -92,8 +92,8 @@ def sessions_to_pairs(
             pair_text = f"{date_prefix}{user_turn['role']}: {user_turn['content']}"
             if asst_turn:
                 pair_text += f"\n{asst_turn['role']}: {asst_turn['content']}"
-            if len(pair_text) > 2000:
-                pair_text = pair_text[:2000] + "..."
+            if len(pair_text) > 4000:
+                pair_text = pair_text[:4000] + "..."
             results.append((pair_text, sid))
 
         # Session summary (full text, higher importance for aggregation queries)

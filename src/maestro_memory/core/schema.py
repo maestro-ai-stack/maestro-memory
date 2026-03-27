@@ -60,6 +60,18 @@ CREATE INDEX IF NOT EXISTS idx_relations_object ON relations(object_id);
 CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
 CREATE INDEX IF NOT EXISTS idx_facts_valid ON facts(valid_from, valid_until);
 CREATE INDEX IF NOT EXISTS idx_relations_valid ON relations(valid_from, valid_until);
+
+-- Serving logs: every search request for offline training and analytics
+CREATE TABLE IF NOT EXISTS serving_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    query TEXT NOT NULL,
+    candidate_fact_ids TEXT,
+    returned_fact_ids TEXT,
+    used_fact_ids TEXT,
+    features_json TEXT,
+    latency_ms REAL
+);
 """
 
 

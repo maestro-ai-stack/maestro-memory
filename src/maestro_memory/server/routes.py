@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from maestro_memory.logging.serving_log import ServingLogger
 from maestro_memory.server.lifecycle import get_memory
 
 router = APIRouter()
@@ -93,6 +94,33 @@ async def add(req: AddRequest) -> AddResponse:
         facts_invalidated=result.facts_invalidated,
         entities_created=result.entities_created,
     )
+
+
+class FeedbackRequest(BaseModel):
+    query: str
+    used_fact_ids: list[int]
+
+
+@router.post("/feedback")
+async def feedback(req: FeedbackRequest):
+    """Record implicit feedback: which facts the agent actually used."""
+    mem = get_memory()
+    logger = ServingLogger(mem.store)
+
+    # Record in serving_logs
+    await logger.record_feedback(req.query, req.used_fact_ids)
+
+    # Increment access_count for each used fact
+    for fid in req.used_fact_ids:
+        await mem.store.increment_access(fid)
+
+    # Update profile entity affinity for used facts
+    for fid in req.used_fact_ids:
+        fact = await mem.store.get_fact(fid)
+        if fact and fact.entity_id is not None:
+            mem.profile.update_entity(fact.entity_id, boost=2.0)
+
+    return {"status": "ok", "facts_updated": len(req.used_fact_ids)}
 
 
 @router.get("/status")

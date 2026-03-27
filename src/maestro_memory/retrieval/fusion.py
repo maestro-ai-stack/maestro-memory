@@ -94,6 +94,7 @@ async def hybrid_search(
     rerank: bool = True,
     profile: UserProfile | None = None,
     session: SessionState | None = None,
+    ann_index: ANNIndex | None = None,
 ) -> list[SearchResult]:
     """Orchestrate 6-channel search (BM25 + embedding + graph + user interest + time + session), fuse with RRF, optionally rerank."""
     # When reranking, fetch more candidates for the reranker to work with
@@ -108,7 +109,7 @@ async def hybrid_search(
     if embedding_provider:
         query_emb = await embedding_provider.embed(query)
         if query_emb is not None:
-            ann = get_ann_index()
+            ann = ann_index or get_ann_index()
             if ann is not None and ann.size > 0:
                 emb_results = ann.search(query_emb, k=fetch_limit)
             else:
@@ -168,8 +169,6 @@ async def hybrid_search(
         entity = None
         if fact.entity_id:
             entity = await store.get_entity(fact.entity_id)
-
-        await store.increment_access(fact_id)
 
         results.append(SearchResult(fact=fact, score=final_score, source="fused", entity=entity))
 

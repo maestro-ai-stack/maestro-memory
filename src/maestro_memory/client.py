@@ -43,6 +43,12 @@ class MemoryClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def feedback(self, query: str, used_fact_ids: list[int]) -> dict:
+        http = await self._get_http()
+        resp = await http.post("/feedback", json={"query": query, "used_fact_ids": used_fact_ids})
+        resp.raise_for_status()
+        return resp.json()
+
     async def health(self) -> dict:
         http = await self._get_http()
         resp = await http.get("/health")

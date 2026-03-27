@@ -151,6 +151,7 @@ class Memory:
             limit=limit, current_only=current_only, as_of=as_of,
             rerank=rerank,
             profile=self.profile, session=self.session,
+            ann_index=self._ann_index,
         )
 
         # Auto-update session state

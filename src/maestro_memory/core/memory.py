@@ -4,6 +4,7 @@ from pathlib import Path
 
 from maestro_memory.core.config import get_db_path
 from maestro_memory.core.models import AddResult, SearchResult
+from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
 from maestro_memory.ingestion.extractor import llm_extract
 from maestro_memory.ingestion.fallback import fallback_extract
@@ -21,6 +22,7 @@ class Memory:
             self._db_path = get_db_path(project)
         self.store = Store(self._db_path)
         self._embedding_provider = None
+        self.session = SessionState()
 
     async def init(self) -> None:
         """Open store and create tables."""
@@ -108,12 +110,29 @@ class Memory:
         as_of: str | None = None,
         rerank: bool = True,
     ) -> list[SearchResult]:
-        """Hybrid search pipeline with optional cross-encoder reranking."""
-        return await hybrid_search(
+        """Hybrid search pipeline with optional cross-encoder reranking.
+
+        Automatically updates session state for context-aware follow-up queries.
+        """
+        # Get query embedding for session tracking
+        query_emb = None
+        if self._embedding_provider:
+            query_emb = await self._embedding_provider.embed(query)
+
+        results = await hybrid_search(
             self.store, query, self._embedding_provider,
             limit=limit, current_only=current_only, as_of=as_of,
             rerank=rerank,
         )
+
+        # Auto-update session state
+        self.session.record_query(query, query_emb)
+        self.session.record_results(
+            [r.fact.id for r in results],
+            [r.fact.entity_id for r in results],
+        )
+
+        return results
 
     async def graph(self, entity_name: str, *, hops: int = 1) -> dict:  # noqa: ARG002
         """Graph traversal from an entity (multi-hop planned for future)."""

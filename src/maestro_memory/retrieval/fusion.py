@@ -9,11 +9,14 @@ import numpy as np
 from maestro_memory.core.models import SearchResult
 from maestro_memory.retrieval.ann_index import ANNIndex
 from maestro_memory.retrieval.bm25 import fts5_search_entities, fts5_search_facts
+from maestro_memory.retrieval.channels import recall_session_context, recall_time_window, recall_user_interest
 from maestro_memory.retrieval.embedding import cosine_top_k
 from maestro_memory.retrieval.graph import graph_neighbors
 from maestro_memory.retrieval.temporal import filter_temporal, temporal_score
 
 if TYPE_CHECKING:
+    from maestro_memory.core.profile import UserProfile
+    from maestro_memory.core.session import SessionState
     from maestro_memory.core.store import Store
     from maestro_memory.retrieval.embedding import EmbeddingProvider
 
@@ -89,8 +92,10 @@ async def hybrid_search(
     current_only: bool = True,
     as_of: str | None = None,
     rerank: bool = True,
+    profile: UserProfile | None = None,
+    session: SessionState | None = None,
 ) -> list[SearchResult]:
-    """Orchestrate BM25 + embedding + graph search, fuse with RRF, optionally rerank."""
+    """Orchestrate 6-channel search (BM25 + embedding + graph + user interest + time + session), fuse with RRF, optionally rerank."""
     # When reranking, fetch more candidates for the reranker to work with
     reranker_available = rerank and _get_reranker() is not None
     fetch_limit = limit * (5 if reranker_available else 3)
@@ -124,8 +129,22 @@ async def hybrid_search(
         entity_ids = [eid for eid, _ in entity_hits]
         graph_results = await graph_neighbors(store, entity_ids, hops=2, current_only=current_only)
 
-    # 4. RRF fusion
-    sources_to_fuse = [r for r in [bm25_results, emb_results, graph_results] if r]
+    # 4. User interest channel
+    interest_results: list[tuple[int, float]] = []
+    if profile and profile.entity_affinity:
+        interest_results = await recall_user_interest(store, profile, limit=fetch_limit)
+
+    # 5. Time window channel
+    time_results = await recall_time_window(store, days=7, limit=fetch_limit)
+
+    # 6. Session context channel
+    session_results: list[tuple[int, float]] = []
+    if session and session.entity_activation:
+        session_results = await recall_session_context(store, session, limit=fetch_limit)
+
+    # RRF fusion
+    sources_to_fuse = [r for r in [bm25_results, emb_results, graph_results,
+                                    interest_results, time_results, session_results] if r]
     if not sources_to_fuse:
         return []
     fused = reciprocal_rank_fusion(*sources_to_fuse)

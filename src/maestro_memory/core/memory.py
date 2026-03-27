@@ -4,6 +4,7 @@ from pathlib import Path
 
 from maestro_memory.core.config import get_db_path
 from maestro_memory.core.models import AddResult, SearchResult
+from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
 from maestro_memory.ingestion.extractor import llm_extract
@@ -26,6 +27,7 @@ class Memory:
         self.store = Store(self._db_path)
         self._embedding_provider = None
         self.session = SessionState()
+        self.profile = UserProfile()
 
     async def init(self) -> None:
         """Open store and create tables, build ANN index from existing embeddings."""
@@ -148,6 +150,7 @@ class Memory:
             self.store, query, self._embedding_provider,
             limit=limit, current_only=current_only, as_of=as_of,
             rerank=rerank,
+            profile=self.profile, session=self.session,
         )
 
         # Auto-update session state
@@ -156,6 +159,14 @@ class Memory:
             [r.fact.id for r in results],
             [r.fact.entity_id for r in results],
         )
+
+        # Auto-update user profile
+        self.profile.total_searches += 1
+        if query_emb is not None:
+            self.profile.update_topic(query_emb)
+        for r in results:
+            if r.fact.entity_id is not None:
+                self.profile.update_entity(r.fact.entity_id)
 
         return results
 

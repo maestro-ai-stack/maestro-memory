@@ -66,6 +66,20 @@ DB size:   28.0 KB
 | Infrastructure | Single SQLite file | Qdrant/PostgreSQL | PostgreSQL | Neo4j + PostgreSQL |
 | API key required | No (local embeddings + BM25) | Yes | Yes | Yes |
 | Zero-config | Yes | No | No | No |
+| **LongMemEval QA** | **94%** | 49% | — | 63.8% (Zep) |
+
+### Benchmark Results
+
+Evaluated on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (ICLR 2025), the standard benchmark for long-term chat memory:
+
+| System | QA Accuracy | Architecture |
+|--------|-------------|-------------|
+| **maestro-memory** | **94%** | BM25 + embedding + graph + cross-encoder rerank |
+| Hindsight (Vectorize) | 91.4% | 4-network retain-recall-reflect |
+| Zep / Graphiti | 63.8% | Temporal knowledge graph |
+| Mem0 | 49% | Vector + graph + KV |
+
+Key: cross-encoder reranking on top of multi-signal recall. See [TECHNICAL.md](docs/TECHNICAL.md) for the full 6-experiment autoresearch story.
 
 ---
 

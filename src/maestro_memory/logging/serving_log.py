@@ -21,11 +21,12 @@ class ServingLogger:
         yield entry
         latency_ms = (time.perf_counter() - entry["t0"]) * 1000
         await self._store.db.execute(
-            "INSERT INTO serving_logs (query, candidate_fact_ids, returned_fact_ids, latency_ms) VALUES (?, ?, ?, ?)",
+            "INSERT INTO serving_logs (query, candidate_fact_ids, returned_fact_ids, features_json, latency_ms) VALUES (?, ?, ?, ?, ?)",
             (
                 query,
                 json.dumps(entry.get("candidate_ids", [])),
                 json.dumps(entry.get("returned_ids", [])),
+                entry.get("features_json"),
                 latency_ms,
             ),
         )

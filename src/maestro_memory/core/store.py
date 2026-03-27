@@ -7,6 +7,7 @@ from pathlib import Path
 import aiosqlite
 
 from maestro_memory.core.models import Entity, Episode, Fact, Relation
+from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.schema import get_schema
 from maestro_memory.retrieval.tokenizer import segment
 
@@ -198,6 +199,62 @@ class Store:
             counts[table] = row[0] if row else 0
         db_size = os.path.getsize(self.db_path) if self.db_path.exists() else 0
         return {**counts, "db_size_bytes": db_size}
+
+    # ── User Profile ─────────────────────────────────────────────
+
+    async def save_profile(self, profile: UserProfile) -> None:
+        """Persist UserProfile to the user_profile table."""
+        import base64
+        import json
+
+        affinity_json = json.dumps(
+            {str(k): v for k, v in profile.entity_affinity.items()}
+        )
+        topic_b64 = ""
+        if profile.topic_embedding is not None:
+            import numpy as np
+            topic_b64 = base64.b64encode(profile.topic_embedding.astype(np.float32).tobytes()).decode()
+
+        pairs = [
+            ("entity_affinity", affinity_json),
+            ("topic_embedding", topic_b64),
+            ("total_searches", str(profile.total_searches)),
+            ("total_adds", str(profile.total_adds)),
+        ]
+        for key, value in pairs:
+            await self.db.execute(
+                "INSERT OR REPLACE INTO user_profile (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+        await self.db.commit()
+
+    async def load_profile(self) -> UserProfile:
+        """Load UserProfile from the user_profile table."""
+        import base64
+        import json
+
+        import numpy as np
+
+        profile = UserProfile()
+        cur = await self.db.execute("SELECT key, value FROM user_profile")
+        rows = await cur.fetchall()
+        data = {row["key"]: row["value"] for row in rows}
+
+        if "entity_affinity" in data:
+            raw = json.loads(data["entity_affinity"])
+            profile.entity_affinity = {int(k): v for k, v in raw.items()}
+
+        if "topic_embedding" in data and data["topic_embedding"]:
+            raw_bytes = base64.b64decode(data["topic_embedding"])
+            profile.topic_embedding = np.frombuffer(raw_bytes, dtype=np.float32).copy()
+
+        if "total_searches" in data:
+            profile.total_searches = int(data["total_searches"])
+
+        if "total_adds" in data:
+            profile.total_adds = int(data["total_adds"])
+
+        return profile
 
     # ── Helpers ───────────────────────────────────────────────────
 

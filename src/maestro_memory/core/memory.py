@@ -9,6 +9,10 @@ from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
 from maestro_memory.ingestion.extractor import llm_extract
 from maestro_memory.ingestion.fallback import fallback_extract
+from maestro_memory.logging.serving_log import ServingLogger
+from maestro_memory.ranking.blender import ThompsonBlender
+from maestro_memory.ranking.online import OnlineRanker
+from maestro_memory.ranking.prerank import PreRanker
 import numpy as np
 
 from maestro_memory.retrieval.ann_index import ANNIndex
@@ -28,10 +32,16 @@ class Memory:
         self._embedding_provider = None
         self.session = SessionState()
         self.profile = UserProfile()
+        self._preranker = PreRanker()
+        self._online_ranker = OnlineRanker()
+        self._blender = ThompsonBlender()
+        self._serving_logger: ServingLogger | None = None
 
     async def init(self) -> None:
         """Open store and create tables, build ANN index from existing embeddings."""
         await self.store.init()
+        self._serving_logger = ServingLogger(self.store)
+        self.profile = await self.store.load_profile()
         self._embedding_provider = get_embedding_provider()
 
         # Build ANN index from existing embeddings
@@ -146,13 +156,40 @@ class Memory:
         if self._embedding_provider:
             query_emb = await self._embedding_provider.embed(query)
 
-        results = await hybrid_search(
-            self.store, query, self._embedding_provider,
-            limit=limit, current_only=current_only, as_of=as_of,
-            rerank=rerank,
-            profile=self.profile, session=self.session,
-            ann_index=self._ann_index,
-        )
+        async with self._serving_logger.log_search(query) as log_entry:
+            results = await hybrid_search(
+                self.store, query, self._embedding_provider,
+                limit=limit, current_only=current_only, as_of=as_of,
+                rerank=rerank,
+                profile=self.profile, session=self.session,
+                ann_index=self._ann_index,
+            )
+            log_entry["candidate_ids"] = [r.fact.id for r in results]
+            log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]
+
+            # Compute 12-dim features for logging (does not change ranking)
+            import json
+            from maestro_memory.ranking.features import extract_features, FEATURE_NAMES
+            features_list = []
+            for r in results:
+                feats = extract_features(
+                    query=query,
+                    fact_content=r.fact.content,
+                    fact_importance=r.fact.importance,
+                    fact_access_count=r.fact.access_count,
+                    fact_created_at=r.fact.created_at,
+                    fact_last_accessed=r.fact.last_accessed,
+                    fact_entity_id=r.fact.entity_id,
+                    bm25_score=r.score,  # approximate — RRF fused score
+                    embed_score=0.0,
+                    graph_distance=0.0,
+                    entity_affinity=self.profile.get_affinity(r.fact.entity_id) if r.fact.entity_id else 0.0,
+                    session_boost=self.session.entity_activation.get(r.fact.entity_id, 0.0) if r.fact.entity_id else 0.0,
+                )
+                features_list.append(
+                    {name: float(feats[i]) for i, name in enumerate(FEATURE_NAMES)}
+                )
+            log_entry["features_json"] = json.dumps(features_list)
 
         # Auto-update session state
         self.session.record_query(query, query_emb)
@@ -198,5 +235,6 @@ class Memory:
         return await self.store.get_stats()
 
     async def close(self) -> None:
-        """Close store."""
+        """Persist profile and close store."""
+        await self.store.save_profile(self.profile)
         await self.store.close()

@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from maestro_memory.logging.serving_log import ServingLogger
 from maestro_memory.server.lifecycle import get_memory
 
 router = APIRouter()
@@ -105,10 +104,10 @@ class FeedbackRequest(BaseModel):
 async def feedback(req: FeedbackRequest):
     """Record implicit feedback: which facts the agent actually used."""
     mem = get_memory()
-    logger = ServingLogger(mem.store)
 
-    # Record in serving_logs
-    await logger.record_feedback(req.query, req.used_fact_ids)
+    # Record in serving_logs (use the Memory's own logger)
+    if mem._serving_logger:
+        await mem._serving_logger.record_feedback(req.query, req.used_fact_ids)
 
     # Increment access_count for each used fact
     for fid in req.used_fact_ids:

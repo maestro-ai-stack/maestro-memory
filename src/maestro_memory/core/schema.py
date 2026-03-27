@@ -61,6 +61,12 @@ CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity_id);
 CREATE INDEX IF NOT EXISTS idx_facts_valid ON facts(valid_from, valid_until);
 CREATE INDEX IF NOT EXISTS idx_relations_valid ON relations(valid_from, valid_until);
 
+-- User profile: persisted entity affinity and topic embedding
+CREATE TABLE IF NOT EXISTS user_profile (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- Serving logs: every search request for offline training and analytics
 CREATE TABLE IF NOT EXISTS serving_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

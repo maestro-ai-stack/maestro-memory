@@ -55,7 +55,7 @@ def load_dataset(variant: str = "oracle") -> list[dict]:
 
 
 def sessions_to_text(sessions: list[list[dict]], dates: list[str] | None = None) -> list[str]:
-    """Convert chat sessions to text chunks for ingestion."""
+    """Convert chat sessions to text chunks for ingestion (whole session mode)."""
     chunks = []
     for i, session in enumerate(sessions):
         date_prefix = f"[{dates[i]}] " if dates and i < len(dates) else ""
@@ -65,35 +65,91 @@ def sessions_to_text(sessions: list[list[dict]], dates: list[str] | None = None)
             content = turn["content"]
             lines.append(f"{role}: {content}")
         text = date_prefix + "\n".join(lines)
-        # Truncate very long sessions to avoid overwhelming single facts
-        if len(text) > 2000:
-            text = text[:2000] + "..."
+        if len(text) > 4000:
+            text = text[:4000] + "..."
         chunks.append(text)
     return chunks
 
 
-async def eval_retrieval_single(item: dict, top_k: int = 10) -> dict:
+def sessions_to_pairs(
+    sessions: list[list[dict]],
+    session_ids: list[str],
+    dates: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    """Decompose sessions into turn pairs + session summary (exp 2+3 strategy).
+
+    Returns list of (text, session_id) tuples for ingestion.
+    """
+    results = []
+    for i, session in enumerate(sessions):
+        date_prefix = f"[{dates[i]}] " if dates and i < len(dates) else ""
+        sid = session_ids[i]
+
+        # Turn pairs: user + assistant consecutive turns
+        for j in range(0, len(session) - 1, 2):
+            user_turn = session[j]
+            asst_turn = session[j + 1] if j + 1 < len(session) else None
+            pair_text = f"{date_prefix}{user_turn['role']}: {user_turn['content']}"
+            if asst_turn:
+                pair_text += f"\n{asst_turn['role']}: {asst_turn['content']}"
+            if len(pair_text) > 2000:
+                pair_text = pair_text[:2000] + "..."
+            results.append((pair_text, sid))
+
+        # Session summary (full text, higher importance for aggregation queries)
+        full_lines = [f"{t['role']}: {t['content']}" for t in session]
+        full_text = date_prefix + "\n".join(full_lines)
+        if len(full_text) > 4000:
+            full_text = full_text[:4000] + "..."
+        results.append((full_text, sid))
+
+    return results
+
+
+async def eval_retrieval_single(
+    item: dict, top_k: int = 20, use_pairs: bool = True, rerank: bool = True,
+) -> dict:
     """Evaluate retrieval for a single question."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "eval.db"
         mem = Memory(path=db_path)
         await mem.init()
 
-        # Ingest all sessions
-        sessions_text = sessions_to_text(
-            item["haystack_sessions"],
-            item.get("haystack_dates"),
-        )
-        session_id_map = {}  # fact_content -> session_id
-        for idx, (text, sid) in enumerate(
-            zip(sessions_text, item["haystack_session_ids"])
-        ):
-            await mem.add(text, source_type="conversation", source_ref=str(sid))
-            session_id_map[text[:200]] = sid
+        # Ingest: session decomposition (pairs + summary) or whole sessions
+        session_id_map = {}  # fact_content[:200] -> session_id
+        if use_pairs:
+            pairs = sessions_to_pairs(
+                item["haystack_sessions"],
+                item["haystack_session_ids"],
+                item.get("haystack_dates"),
+            )
+            for text, sid in pairs:
+                await mem.add(text, source_type="conversation", source_ref=str(sid))
+                session_id_map[text[:200]] = sid
+        else:
+            sessions_text = sessions_to_text(
+                item["haystack_sessions"],
+                item.get("haystack_dates"),
+            )
+            for text, sid in zip(sessions_text, item["haystack_session_ids"]):
+                await mem.add(text, source_type="conversation", source_ref=str(sid))
+                session_id_map[text[:200]] = sid
 
-        # Search
+        # Search with reranking
+        fetch_limit = top_k * 3 if rerank else top_k
         t0 = time.perf_counter()
-        results = await mem.search(item["question"], limit=top_k)
+        results = await mem.search(
+            item["question"], limit=fetch_limit, rerank=rerank,
+        )
+        # Dedup by first 100 chars
+        seen = set()
+        deduped = []
+        for r in results:
+            key = r.fact.content[:100]
+            if key not in seen:
+                seen.add(key)
+                deduped.append(r)
+        results = deduped[:top_k]
         search_time = time.perf_counter() - t0
 
         # Check retrieval recall: do retrieved facts come from evidence sessions?
@@ -116,7 +172,7 @@ async def eval_retrieval_single(item: dict, top_k: int = 10) -> dict:
             session_recall = 0.0
 
         # Content-level: check if answer keywords appear in retrieved text
-        answer = item["answer"].lower()
+        answer = str(item["answer"]).lower()
         all_retrieved = " ".join(retrieved_contents).lower()
         # Simple keyword overlap
         answer_words = set(answer.split())
@@ -138,17 +194,20 @@ async def eval_retrieval_single(item: dict, top_k: int = 10) -> dict:
         "keyword_overlap": keyword_overlap,
         "search_time_ms": search_time * 1000,
         "num_facts": stats["facts"],
-        "num_sessions_ingested": len(sessions_text),
+        "num_chunks_ingested": stats["facts"],
         "num_evidence_sessions": len(evidence_sids),
         "num_retrieved": len(results),
         "retrieved_preview": [r.fact.content[:100] for r in results[:3]],
+        "retrieved_full": [r.fact.content[:2000] for r in results[:10]],
     }
 
 
 async def run_retrieval_eval(
     data: list[dict],
     limit: int | None = None,
-    top_k: int = 10,
+    top_k: int = 20,
+    use_pairs: bool = True,
+    rerank: bool = True,
 ) -> list[dict]:
     """Run retrieval eval on dataset."""
     if limit:
@@ -156,7 +215,9 @@ async def run_retrieval_eval(
 
     results = []
     for i, item in enumerate(data):
-        result = await eval_retrieval_single(item, top_k=top_k)
+        result = await eval_retrieval_single(
+            item, top_k=top_k, use_pairs=use_pairs, rerank=rerank,
+        )
         results.append(result)
 
         status = "HIT" if result["session_recall"] > 0 else "MISS"
@@ -215,41 +276,34 @@ def print_summary(results: list[dict], variant: str) -> None:
 
 async def main():
     parser = argparse.ArgumentParser(description="LongMemEval benchmark for mmem")
-    parser.add_argument(
-        "--data",
-        choices=["oracle", "s"],
-        default="oracle",
-        help="Dataset variant: oracle (evidence only) or s (~40 sessions)",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Max questions to evaluate (default: all 500)",
-    )
-    parser.add_argument(
-        "--top-k",
-        type=int,
-        default=10,
-        help="Number of facts to retrieve per query",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["retrieval"],
-        default="retrieval",
-        help="Evaluation mode",
-    )
+    parser.add_argument("--data", choices=["oracle", "s", "custom"], default="s")
+    parser.add_argument("--data-file", type=str, default=None, help="Path to custom JSON data file")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--top-k", type=int, default=20)
+    parser.add_argument("--no-pairs", action="store_true", help="Use whole sessions instead of turn pairs")
+    parser.add_argument("--no-rerank", action="store_true", help="Disable cross-encoder reranking")
     args = parser.parse_args()
 
+    use_pairs = not args.no_pairs
+    rerank = not args.no_rerank
+
     print(f"Loading LongMemEval ({args.data})...")
-    data = load_dataset(args.data)
+    if args.data_file:
+        with open(args.data_file) as f:
+            data = json.load(f)
+    else:
+        data = load_dataset(args.data)
     print(f"  {len(data)} questions loaded")
+    print(f"  pairs={use_pairs}, rerank={rerank}, top_k={args.top_k}")
 
     if args.limit:
         print(f"  Limited to first {args.limit} questions")
 
-    print(f"\nRunning retrieval evaluation (top-{args.top_k})...\n")
-    results = await run_retrieval_eval(data, limit=args.limit, top_k=args.top_k)
+    print(f"\nRunning retrieval evaluation...\n")
+    results = await run_retrieval_eval(
+        data, limit=args.limit, top_k=args.top_k,
+        use_pairs=use_pairs, rerank=rerank,
+    )
 
     print_summary(results, args.data)
 
@@ -259,6 +313,22 @@ async def main():
     with open(out_path, "w") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     print(f"\n  Saved to {out_path}")
+
+    # Save retrieval_for_qa.json for subagent QA judging
+    qa_data = []
+    for r in results:
+        qa_data.append({
+            "question_id": r["question_id"],
+            "question_type": r["question_type"],
+            "question": r["question"],
+            "gold_answer": r["answer"],
+            "retrieved_context": r.get("retrieved_full", []),
+            "session_recall": r["session_recall"],
+        })
+    qa_path = RESULTS_DIR / "retrieval_for_qa.json"
+    with open(qa_path, "w") as f:
+        json.dump(qa_data, f, indent=2, ensure_ascii=False)
+    print(f"  Saved QA data to {qa_path}")
 
 
 if __name__ == "__main__":

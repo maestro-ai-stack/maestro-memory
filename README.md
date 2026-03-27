@@ -1,11 +1,12 @@
-# maestro-memory
-
-**Remember everything. Retrieve what matters.**
-
-[![PyPI version](https://img.shields.io/pypi/v/maestro-memory.svg)](https://pypi.org/project/maestro-memory/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Skills Ecosystem](https://img.shields.io/badge/skills-ecosystem-blueviolet)](https://github.com/anthropics/skills)
+<p align="center"><img src=".github/maestro-logo.png" alt="Maestro" width="120" /></p>
+<h1 align="center">maestro-memory</h1>
+<p align="center"><strong>Remember everything. Retrieve what matters.</strong></p>
+<p align="center">
+  <a href="https://pypi.org/project/maestro-memory/"><img src="https://img.shields.io/pypi/v/maestro-memory.svg" alt="PyPI version" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/anthropics/skills"><img src="https://img.shields.io/badge/skills-ecosystem-blueviolet" alt="Skills Ecosystem" /></a>
+</p>
 
 Cognitive-inspired memory for AI agents. Three-layer architecture modeled on human memory: working memory (context window), short-term memory (post-conversation extraction), and long-term memory (periodic consolidation with adaptive forgetting). Combines BM25 keyword search, embedding similarity, knowledge graph traversal, and ACT-R activation decay -- all in a single SQLite file. Zero infrastructure, zero config, zero API keys required.
 
@@ -343,4 +344,4 @@ MIT
 
 ---
 
-Built by [Maestro](https://maestro.onl) — Singapore AI product studio.
+<p align="center">Built by <a href="https://maestro.onl">Maestro</a> — Singapore AI product studio.</p>

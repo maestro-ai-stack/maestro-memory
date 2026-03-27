@@ -8,8 +8,11 @@ from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
 from maestro_memory.ingestion.extractor import llm_extract
 from maestro_memory.ingestion.fallback import fallback_extract
+import numpy as np
+
+from maestro_memory.retrieval.ann_index import ANNIndex
 from maestro_memory.retrieval.embedding import get_embedding_provider
-from maestro_memory.retrieval.fusion import hybrid_search
+from maestro_memory.retrieval.fusion import hybrid_search, set_ann_index
 
 
 class Memory:
@@ -25,9 +28,23 @@ class Memory:
         self.session = SessionState()
 
     async def init(self) -> None:
-        """Open store and create tables."""
+        """Open store and create tables, build ANN index from existing embeddings."""
         await self.store.init()
         self._embedding_provider = get_embedding_provider()
+
+        # Build ANN index from existing embeddings
+        cur = await self.store.db.execute("SELECT id, embedding FROM facts WHERE embedding IS NOT NULL")
+        rows = await cur.fetchall()
+        if rows:
+            dim = len(np.frombuffer(rows[0][1], dtype=np.float32))
+            ann = ANNIndex(dim=dim)
+            for row in rows:
+                emb = np.frombuffer(row[1], dtype=np.float32)
+                ann.add(row[0], emb)
+            set_ann_index(ann)
+            self._ann_index = ann
+        else:
+            self._ann_index = None
 
     async def add(
         self,
@@ -71,13 +88,14 @@ class Memory:
                     if created:
                         result.entities_created += 1
 
+                emb = None
                 emb_bytes = None
                 if self._embedding_provider:
                     emb = await self._embedding_provider.embed(fact_content)
                     if emb is not None:
                         emb_bytes = emb.tobytes()
 
-                await self.store.add_fact(
+                fact_id = await self.store.add_fact(
                     content=fact_content,
                     fact_type=op.get("type", fact_type),
                     importance=op.get("importance", importance),
@@ -86,6 +104,13 @@ class Memory:
                     episode_id=episode_id,
                 )
                 result.facts_added += 1
+
+                # Add to ANN index
+                if emb is not None:
+                    if self._ann_index is None:
+                        self._ann_index = ANNIndex(dim=len(emb))
+                        set_ann_index(self._ann_index)
+                    self._ann_index.add(fact_id, emb)
 
             elif action == "UPDATE":
                 fid = op.get("fact_id")

@@ -127,3 +127,46 @@ async def test_hybrid_search_bm25_only(store: Store) -> None:
     results = await hybrid_search(store, "Python scripting", None, limit=5)
     assert len(results) >= 1
     assert "Python" in results[0].fact.content
+
+
+# ── ANN Index ────────────────────────────────────────────────────────────
+
+
+def test_ann_index_search():
+    """Test hnswlib ANN index basic search."""
+    try:
+        import hnswlib  # noqa: F401
+    except ImportError:
+        pytest.skip("hnswlib not installed")
+    from maestro_memory.retrieval.ann_index import ANNIndex
+
+    idx = ANNIndex(dim=4)
+    idx.add(1, np.array([1.0, 0, 0, 0], dtype=np.float32))
+    idx.add(2, np.array([0, 1.0, 0, 0], dtype=np.float32))
+    idx.add(3, np.array([0.9, 0.1, 0, 0], dtype=np.float32))
+    results = idx.search(np.array([1.0, 0, 0, 0], dtype=np.float32), k=2)
+    assert results[0][0] == 1  # closest
+    assert results[1][0] == 3  # second closest
+
+
+def test_ann_index_empty():
+    """Test ANN index returns empty for no data."""
+    from maestro_memory.retrieval.ann_index import ANNIndex
+
+    idx = ANNIndex(dim=4)
+    results = idx.search(np.array([1.0, 0, 0, 0], dtype=np.float32), k=5)
+    assert results == []
+
+
+def test_ann_index_dedup():
+    """Test ANN index ignores duplicate fact_ids."""
+    try:
+        import hnswlib  # noqa: F401
+    except ImportError:
+        pytest.skip("hnswlib not installed")
+    from maestro_memory.retrieval.ann_index import ANNIndex
+
+    idx = ANNIndex(dim=4)
+    idx.add(1, np.array([1.0, 0, 0, 0], dtype=np.float32))
+    idx.add(1, np.array([0, 1.0, 0, 0], dtype=np.float32))  # same id, different vec
+    assert idx.size == 1

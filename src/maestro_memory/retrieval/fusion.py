@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from maestro_memory.core.models import SearchResult
+from maestro_memory.retrieval.ann_index import ANNIndex
 from maestro_memory.retrieval.bm25 import fts5_search_entities, fts5_search_facts
 from maestro_memory.retrieval.embedding import cosine_top_k
 from maestro_memory.retrieval.graph import graph_neighbors
@@ -15,6 +16,22 @@ from maestro_memory.retrieval.temporal import filter_temporal, temporal_score
 if TYPE_CHECKING:
     from maestro_memory.core.store import Store
     from maestro_memory.retrieval.embedding import EmbeddingProvider
+
+
+# ── ANN index (module-level singleton) ────────────────────────
+
+_ann_index: ANNIndex | None = None
+
+
+def get_ann_index() -> ANNIndex | None:
+    """Return the module-level ANN index, or None if not set."""
+    return _ann_index
+
+
+def set_ann_index(index: ANNIndex | None) -> None:
+    """Set the module-level ANN index."""
+    global _ann_index
+    _ann_index = index
 
 
 # ── Cross-encoder reranker (lazy-loaded) ──────────────────────
@@ -81,19 +98,24 @@ async def hybrid_search(
     # 1. BM25 search
     bm25_results = await fts5_search_facts(store, query, limit=fetch_limit)
 
-    # 2. Embedding search
+    # 2. Embedding search (ANN index preferred, brute-force fallback)
     emb_results: list[tuple[int, float]] = []
     if embedding_provider:
         query_emb = await embedding_provider.embed(query)
         if query_emb is not None:
-            cur = await store.db.execute("SELECT id, embedding FROM facts WHERE embedding IS NOT NULL")
-            rows = await cur.fetchall()
-            fact_embeddings = []
-            for row in rows:
-                emb = np.frombuffer(row[1], dtype=np.float32)
-                fact_embeddings.append((row[0], emb))
-            if fact_embeddings:
-                emb_results = cosine_top_k(query_emb, fact_embeddings, k=fetch_limit)
+            ann = get_ann_index()
+            if ann is not None and ann.size > 0:
+                emb_results = ann.search(query_emb, k=fetch_limit)
+            else:
+                # Brute-force fallback: load all embeddings from DB
+                cur = await store.db.execute("SELECT id, embedding FROM facts WHERE embedding IS NOT NULL")
+                rows = await cur.fetchall()
+                fact_embeddings = []
+                for row in rows:
+                    emb = np.frombuffer(row[1], dtype=np.float32)
+                    fact_embeddings.append((row[0], emb))
+                if fact_embeddings:
+                    emb_results = cosine_top_k(query_emb, fact_embeddings, k=fetch_limit)
 
     # 3. Graph expansion
     graph_results: list[tuple[int, float]] = []

@@ -256,9 +256,84 @@ Storage layout:
 
 ---
 
+## Roadmap
+
+### v0.2 — Retrieval Quality (current)
+
+- [x] Cross-encoder reranking (ms-marco-MiniLM, +20% QA accuracy)
+- [x] SessionState for implicit context tracking
+- [x] LongMemEval benchmark infrastructure
+- [ ] BGE-M3 embedding upgrade (384d → 1024d, multilingual)
+- [ ] ANN index via sqlite-vss or hnswlib (scale to 100K+ facts)
+- [ ] Contradiction detection (embedding similarity → LLM judge → invalidate)
+
+### v0.3 — Service Architecture
+
+- [ ] MCP server mode (persistent daemon, pre-loaded models, <10ms search)
+- [ ] Multi-tool interface: `mem_search` / `mem_profile` / `mem_graph` / `mem_timeline` / `mem_recent`
+- [ ] Serving logger (auto-collect training data from usage)
+- [ ] Model hot-reload (swap models without restart)
+
+### v0.4 — Learned Ranking
+
+- [ ] LightGBM pre-ranker (15-dim features, trained from serving logs)
+- [ ] LinUCB bandit blender (online-learned fusion weights, replaces static RRF)
+- [ ] Query-dependent alpha (short query → BM25 weight up, long query → embedding up)
+- [ ] Cross-encoder domain finetune on serving logs (4090 weekly)
+
+### v0.5 — Continuous Learning
+
+- [ ] `mmem train` CLI — trigger offline training on remote GPU
+- [ ] Intent classifier (DistilBERT, daily retrain from usage data)
+- [ ] Memory-R1 RL manager (Qwen2.5-3B GRPO for ADD/UPDATE/DELETE decisions)
+- [ ] User profile embeddings (entity affinity + topic vectors)
+- [ ] Periodic consolidation (merge low-activation facts, prune noise)
+
+### v1.0 — Production
+
+- [ ] Bi-temporal schema (assertion time vs event time)
+- [ ] Multi-project memory sharing with ACL
+- [ ] Streaming ingestion (watch files/conversations in real-time)
+- [ ] OpenTelemetry metrics (search latency, recall, model performance)
+- [ ] PyPI stable release
+
+### Technical Evolution Map
+
+```
+                     Current              Next               Future
+                     ───────              ────               ──────
+Embedding       all-MiniLM-L6-v2    → BGE-M3 (1024d)    → domain-finetuned
+                    (384d)              multilingual         on serving logs
+
+Vector index    numpy linear scan   → sqlite-vss/hnswlib → FAISS with IVF
+                    (<10K facts)        (<1M facts)          (unlimited)
+
+Reranker        ms-marco-MiniLM     → BGE-reranker-v2-m3 → domain-finetuned
+                    (English)           (multilingual)       cross-encoder
+
+Fusion          RRF (static k=60)   → LinUCB bandit      → LambdaMART
+                                        (online learned)     (listwise LTR)
+
+Pre-rank        none                → LightGBM (15-dim)  → distilled from
+                                                             cross-encoder
+
+Memory mgmt     rule-based          → BERT-tiny           → Qwen2.5-3B
+                    (fallback)          classifier (17MB)    GRPO (Memory-R1)
+
+Context         SessionState        → MCP server          → agent feedback
+                    (in-process)        (persistent)         loop (LinUCB)
+
+Training        manual              → mmem train CLI      → continuous
+                                        (SSH to 4090)        learning pipeline
+```
+
+Each upgrade is **backward-compatible** — every model is optional, and mmem always falls back to the previous tier. A single SQLite file remains the core.
+
+---
+
 ## Contributing
 
-Open issues and PRs on this repo. Run `ruff check` and `pytest tests/ -v` before submitting.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines.
 
 ---
 
@@ -268,4 +343,4 @@ MIT
 
 ---
 
-Built by [Maestro](https://maestro.onl) -- Singapore AI product studio.
+Built by [Maestro](https://maestro.onl) — Singapore AI product studio.

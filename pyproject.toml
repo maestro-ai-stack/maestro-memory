@@ -4,15 +4,35 @@ build-backend = "hatchling.build"
 
 [project]
 name = "maestro-memory"
-version = "0.1.0"
-description = "Temporal hybrid memory system for AI agents"
+version = "0.2.0"
+description = "Temporal hybrid memory system for AI agents — cognitive-science-grounded retrieval with cross-encoder reranking"
 license = "MIT"
 requires-python = ">=3.11"
+readme = "README.md"
+authors = [{name = "Maestro AI", email = "open-source@maestro.onl"}]
+keywords = ["memory", "agents", "retrieval", "embeddings", "sqlite", "temporal", "act-r", "reranking"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "aiosqlite>=0.20",
     "numpy>=1.26",
     "typer>=0.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/maestro-ai-stack/maestro-memory"
+Repository = "https://github.com/maestro-ai-stack/maestro-memory.git"
+Documentation = "https://github.com/maestro-ai-stack/maestro-memory/blob/master/docs/TECHNICAL.md"
+"Bug Tracker" = "https://github.com/maestro-ai-stack/maestro-memory/issues"
 
 [project.optional-dependencies]
 local = ["sentence-transformers>=3.0"]

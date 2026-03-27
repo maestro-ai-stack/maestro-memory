@@ -1,14 +1,16 @@
 """Shared fixtures for maestro-memory tests."""
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
-from maestro_memory.core.store import Store
+import pytest
+import pytest_asyncio
+
 from maestro_memory.core.memory import Memory
+from maestro_memory.core.store import Store
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def store(tmp_path: Path):
     """Provide an initialised Store backed by a temp DB."""
     s = Store(tmp_path / "test.db")
@@ -17,7 +19,7 @@ async def store(tmp_path: Path):
     await s.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def memory(tmp_path: Path):
     """Provide an initialised Memory backed by a temp DB."""
     m = Memory(path=tmp_path / "mem.db")

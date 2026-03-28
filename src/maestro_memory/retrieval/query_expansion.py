@@ -76,6 +76,18 @@ def expand_query(query: str) -> list[str]:
         rejected_thing = negation_match.group(1).strip().rstrip("?")
         variants.append(f"rejected {rejected_thing}")
         variants.append(f"instead of {rejected_thing}")
+        variants.append(f"{rejected_thing} not appropriate")
+        variants.append(f"switched from {rejected_thing}")
+
+    # 6. Sufficiency/should queries
+    sufficiency_match = re.search(
+        r"(?:is|are)\s+(.+?)\s+(?:sufficient|enough|adequate|the right|correct)\s*\??$",
+        query, re.IGNORECASE,
+    )
+    if sufficiency_match:
+        thing = sufficiency_match.group(1).strip()
+        variants.append(f"{thing} not sufficient")
+        variants.append(f"{thing} validation")
 
     # Deduplicate while preserving order
     seen = set()
@@ -86,4 +98,4 @@ def expand_query(query: str) -> list[str]:
             seen.add(v_lower)
             unique.append(v)
 
-    return unique[:4]  # max 4 variants
+    return unique[:6]  # max 6 variants

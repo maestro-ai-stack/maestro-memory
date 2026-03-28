@@ -172,6 +172,14 @@ class Memory:
 
         effective_min_score = min_score if min_score > 0 else self._confidence_threshold
 
+        # Auto-detect aggregation queries → enable MMR diversity
+        query_lower = query.lower()
+        agg_words = {"all", "list", "every", "how many", "conditions", "complete",
+                      "total", "what are", "pitfall", "issue", "watch out", "careful", "handle"}
+        if any(w in query_lower for w in agg_words):
+            diverse = True
+            limit = max(limit, 15)  # more results for aggregation
+
         async with self._serving_logger.log_search(query) as log_entry:
             results = await hybrid_search(
                 self.store, query, self._embedding_provider,
@@ -211,6 +219,17 @@ class Memory:
         # Compute search metadata (confidence + hints for agent)
         from maestro_memory.core.models import SearchMeta
         self.last_search_meta = SearchMeta.from_results(query, results, threshold=self._confidence_threshold)
+
+        # Inject guidance as synthetic result when confidence is low/none
+        if self.last_search_meta.confidence in ("none", "low"):
+            from maestro_memory.core.models import Fact
+            guidance_fact = Fact(
+                id=-1,
+                content=self.last_search_meta.hint,
+                fact_type="guidance",
+                importance=0.0,
+            )
+            results.insert(0, SearchResult(fact=guidance_fact, score=0.0, source="guidance"))
 
         # Auto-update session state
         self.session.record_query(query, query_emb)

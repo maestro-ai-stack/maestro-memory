@@ -42,9 +42,10 @@ async def test_search_current_only(memory: Memory) -> None:
     assert len(facts) >= 1
     await memory.store.invalidate_fact(facts[0].id)
 
-    # current_only search should not return it
+    # current_only search should not return it (guidance facts excluded)
     results = await memory.search("Deprecated", current_only=True)
-    assert len(results) == 0
+    real_results = [r for r in results if r.source != "guidance"]
+    assert len(real_results) == 0
 
 
 @pytest.mark.asyncio

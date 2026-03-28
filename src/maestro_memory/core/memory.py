@@ -221,7 +221,7 @@ class Memory:
         self.last_search_meta = SearchMeta.from_results(query, results, threshold=self._confidence_threshold)
 
         # Inject guidance as synthetic result when confidence is low/none
-        if self.last_search_meta.confidence in ("none", "low"):
+        if self.last_search_meta.confidence in ("none", "low") and self.last_search_meta.hint:
             from maestro_memory.core.models import Fact
             guidance_fact = Fact(
                 id=-1,
@@ -229,6 +229,7 @@ class Memory:
                 fact_type="guidance",
                 importance=0.0,
             )
+            # Prepend guidance but keep real results after it
             results.insert(0, SearchResult(fact=guidance_fact, score=0.0, source="guidance"))
 
         # Auto-update session state

@@ -92,6 +92,25 @@ class SearchMeta:
 
         suggestion = None
 
+        # Query coverage analysis: check if key query terms appear in results
+        # Extract content words from query (skip stopwords)
+        import re
+        stopwords = {"what", "is", "the", "a", "an", "of", "for", "in", "on", "to", "and", "or",
+                      "how", "do", "does", "did", "i", "my", "we", "our", "this", "that", "it",
+                      "can", "could", "should", "have", "has", "was", "were", "been", "be", "are",
+                      "with", "from", "by", "at", "about", "not", "no", "any", "some", "much",
+                      "many", "very", "s", "t", "re", "ll", "ve", "d", "m"}
+        query_terms = {w for w in re.findall(r"[a-zA-Z]+", query_lower) if w not in stopwords and len(w) > 2}
+        all_result_text = " ".join(r.fact.content.lower() for r in results if r.source != "guidance")
+        covered = {t for t in query_terms if t in all_result_text}
+        uncovered = query_terms - covered
+
+        # If significant query terms are missing from ALL results → low confidence
+        if query_terms and len(uncovered) / len(query_terms) > 0.5 and len(uncovered) >= 2:
+            missing_str = ", ".join(sorted(uncovered)[:5])
+            confidence = "low"
+            hint = f"Key query terms not found in memory: {missing_str}. This topic may not be stored."
+
         # Aggregation detection
         agg_words = {"all", "list", "every", "how many", "what are the", "conditions", "complete", "total"}
         if any(w in query_lower for w in agg_words):

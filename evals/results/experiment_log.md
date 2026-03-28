@@ -171,16 +171,37 @@ Session Recall baseline: **83.3%** (N=500)
 | Multi-query retrieval (BM25 + embedding separate top-k union) | +2-3% (fixes single-signal misses) | Low — eval change |
 | Larger N eval (200+) to reduce judge variance | Better signal | Medium — longer runs |
 
+## Experiment 14: Ranking pipeline wiring + Context String Enrichment (Phase 0)
+- Date: 2026-03-28
+- Changes:
+  1. Wired PreRanker (LightGBM), OnlineRanker (River), ThompsonBlender into hybrid_search()
+  2. Weighted RRF via Thompson-sampled channel weights
+  3. PreRanker pre-rank step between RRF and cross-encoder
+  4. OnlineRanker P(used) score boost (0.5x-1.5x)
+  5. feedback() method for online learning from implicit feedback
+  6. Context string enrichment: inject category/entity/relations/importance into embedding input
+  7. Per-channel origin tracking on SearchResult
+- maestro-env keyword: **45/58 (78%) — no change**
+- maestro-env agent-judged: **49/58 (84%) — no change**
+- Tests: 97 passed, 1 skipped (+19 enrichment tests)
+- Verdict: **KEEP** — infra is correct, no behavioral change yet because:
+  - Ranking components untrained (graceful degradation): PreRanker has no model, OnlineRanker has 0 updates, ThompsonBlender has 0 updates
+  - Context enrichment has no effect in eval because eval seeds facts without pre-existing graph relations → enrichment only adds minimal metadata (category + importance level)
+  - These components need real usage + feedback data to show improvement
+- Same 9 failures: cross_session (2), temporal (1), aggregation (2), negation (2), scale (2)
+- Key insight: **eval environment doesn't exercise online learning or graph-based enrichment**. To show improvement, need either:
+  1. Eval scenarios that build up relations before querying (multi-round eval)
+  2. Richer fact seeding with entity_name + entity_type + relations
+  3. Simulate feedback loops within eval
+
 ## Progress Summary
 ```
-Date: 2026-03-27
-Experiments: 7 (5 kept, 1 reverted, 1 informative)
-QA Accuracy (stratified): 82% (41/50)
-QA Accuracy (first-50): 94% (47/50)
-Retrieval Benchmark: 100% (33/33 scenarios)
-Session Recall: 99% (stratified N=50)
-Leaderboard: #2 behind Hindsight (91.4%) on stratified eval
-Core v2 committed: daemon, ANN, 6-channel, profile, ranking, feedback
-Tests: 78 passed, 1 skipped
-Next experiment: increase truncation for assistant type
+Date: 2026-03-28
+Experiments: 14 (8 kept, 1 reverted, 1 informative, 4 infra-only)
+maestro-env: 84% agent-judged, 78% keyword (58 scenarios)
+LongMemEval (stratified): 86% (43/50)
+Core v2: daemon, ANN, 6-channel, profile, ranking (wired), feedback, enrichment
+Online learning: scaffolded + wired (needs real usage data)
+Tests: 97 passed, 1 skipped
+Next: seed eval with richer entity/relation data, or focus on the 9 hard failures
 ```

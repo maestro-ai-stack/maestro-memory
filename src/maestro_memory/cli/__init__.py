@@ -55,6 +55,53 @@ def server_start_cmd(
         uvicorn.run(a, host="127.0.0.1", port=port)
 
 
+@app.command("server-install")
+def server_install_cmd():
+    """Install mmem daemon as macOS launchd service (auto-start on login)."""
+    import platform
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    if platform.system() != "Darwin":
+        typer.echo("launchd is macOS only. Use systemd on Linux.")
+        raise typer.Exit(1)
+
+    python_path = sys.executable
+    log_dir = Path.home() / ".maestro" / "memory"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    plist_src = Path(__file__).parent.parent / "resources" / "com.maestro.memory.plist"
+    plist_dst = Path.home() / "Library" / "LaunchAgents" / "com.maestro.memory.plist"
+
+    content = plist_src.read_text()
+    content = content.replace("__PYTHON_PATH__", python_path)
+    content = content.replace("__LOG_DIR__", str(log_dir))
+    content = content.replace("__HOME__", str(Path.home()))
+
+    plist_dst.write_text(content)
+
+    subprocess.run(["launchctl", "load", str(plist_dst)], check=True)
+    typer.echo(f"Installed: {plist_dst}")
+    typer.echo(f"Daemon will auto-start on login. Logs: {log_dir}/server.log")
+    typer.echo("To check status: launchctl list | grep maestro")
+
+
+@app.command("server-uninstall")
+def server_uninstall_cmd():
+    """Uninstall mmem daemon launchd service."""
+    import subprocess
+    from pathlib import Path
+
+    plist_path = Path.home() / "Library" / "LaunchAgents" / "com.maestro.memory.plist"
+    if plist_path.exists():
+        subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
+        plist_path.unlink()
+        typer.echo("Uninstalled mmem daemon service.")
+    else:
+        typer.echo("No launchd service found.")
+
+
 @app.command("server-stop")
 def server_stop_cmd():
     """Stop mmem daemon server."""

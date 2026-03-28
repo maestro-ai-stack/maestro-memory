@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.maestro.memory</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_PATH__</string>
+        <string>-m</string>
+        <string>maestro_memory.server</string>
+        <string>--port</string>
+        <string>19830</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/server.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/server.err</string>
+    <key>WorkingDirectory</key>
+    <string>__HOME__</string>
+</dict>
+</plist>

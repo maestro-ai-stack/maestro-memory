@@ -41,12 +41,14 @@ anthropic = ["anthropic>=0.34"]
 chinese = ["jieba>=0.42"]
 ann = ["hnswlib>=0.8"]
 server = ["fastapi>=0.115", "uvicorn>=0.32", "httpx>=0.28"]
+mcp = ["mcp>=1.0", "httpx>=0.28"]
 all = ["maestro-memory[local]", "maestro-memory[openai]", "maestro-memory[anthropic]", "maestro-memory[chinese]", "maestro-memory[ann]"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "httpx>=0.28"]
 
 [project.scripts]
 maestro-memory = "maestro_memory.cli:app"
 mmem = "maestro_memory.cli:app"
+mmem-mcp = "maestro_memory.mcp.server:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/maestro_memory"]

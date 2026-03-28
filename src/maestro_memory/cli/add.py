@@ -9,6 +9,20 @@ import typer
 from maestro_memory.core.memory import Memory
 
 
+async def _try_daemon_add(content: str, **kwargs) -> dict | None:
+    """Try daemon first, return None if not available."""
+    try:
+        from maestro_memory.client import MemoryClient
+
+        client = MemoryClient()
+        await client.health()
+        result = await client.add(content, **kwargs)
+        await client.close()
+        return result
+    except Exception:
+        return None
+
+
 def add_cmd(
     content: Optional[str] = typer.Argument(None, help="Content to remember"),
     fact_type: str = typer.Option("observation", "--type", "-t", help="Fact type: observation|preference|feedback|decision"),
@@ -41,6 +55,26 @@ async def _add(
     source_ref: str | None, importance: float,
     entity_name: str | None, entity_type: str, project: str | None,
 ) -> None:
+    # Try daemon first for simple adds (no project override)
+    if not project:
+        kwargs = {
+            "fact_type": fact_type,
+            "source_type": source,
+            "importance": importance,
+        }
+        if source_ref:
+            kwargs["source_ref"] = source_ref
+        if entity_name:
+            kwargs["entity_name"] = entity_name
+            kwargs["entity_type"] = entity_type
+        daemon_result = await _try_daemon_add(content, **kwargs)
+        if daemon_result is not None:
+            typer.echo(f"Episode #{daemon_result['episode_id']} stored.")
+            typer.echo(f"  facts added={daemon_result['facts_added']} updated={daemon_result.get('facts_updated', 0)} "
+                        f"invalidated={daemon_result.get('facts_invalidated', 0)} entities={daemon_result['entities_created']}")
+            return
+
+    # Fallback to direct Memory access
     mem = Memory(project=project)
     await mem.init()
     try:

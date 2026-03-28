@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -55,6 +55,7 @@ class SearchResult:
     score: float
     source: str = ""  # "bm25" | "embedding" | "graph" | "fused"
     entity: Entity | None = None
+    channels: set[int] = field(default_factory=set)  # channel indices that sourced this fact
 
 
 @dataclass

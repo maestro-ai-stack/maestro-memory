@@ -64,3 +64,8 @@ FEATURE_NAMES = [
     "importance", "access_count", "fact_length", "days_since_created",
     "days_since_accessed", "act_r_activation", "entity_affinity", "session_boost",
 ]
+
+
+def features_to_dict(features: np.ndarray) -> dict[str, float]:
+    """Convert 12-dim feature vector to dict keyed by FEATURE_NAMES (for River)."""
+    return {name: float(features[i]) for i, name in enumerate(FEATURE_NAMES)}

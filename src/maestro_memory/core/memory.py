@@ -7,6 +7,7 @@ from maestro_memory.core.models import AddResult, SearchResult
 from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
+from maestro_memory.ingestion.enrichment import enrich_for_embedding
 from maestro_memory.ingestion.extractor import llm_extract
 from maestro_memory.ingestion.fallback import fallback_extract
 from maestro_memory.logging.serving_log import ServingLogger
@@ -32,6 +33,8 @@ class Memory:
         self._embedding_provider = None
         self.session = SessionState()
         self.last_search_meta = None  # populated after every search()
+        self._last_search_results: list[SearchResult] = []  # for feedback()
+        self._last_search_query: str = ""
         self._confidence_threshold = 0.001
         self.profile = UserProfile()
         self._preranker = PreRanker()
@@ -112,10 +115,33 @@ class Memory:
                     if created:
                         result.entities_created += 1
 
+                # Enrich content for embedding (original content stored unchanged)
+                entity_name_str = entity_name if isinstance(entity_name, str) else None
+                related_entities: list[str] = []
+                relations_list: list[tuple[str, str]] = []
+                if entity_id:
+                    rels = await self.store.get_relations_for_entity(entity_id)
+                    for r in rels:
+                        target_id = r.object_id if r.subject_id == entity_id else r.subject_id
+                        target = await self.store.get_entity(target_id)
+                        if target:
+                            related_entities.append(target.name)
+                            relations_list.append((r.predicate, target.name))
+
+                enriched = await enrich_for_embedding(
+                    fact_content,
+                    fact_type=op.get("type", fact_type),
+                    entity_name=entity_name_str,
+                    entity_type=op.get("entity_type", "concept"),
+                    importance=op.get("importance", importance),
+                    related_entities=related_entities or None,
+                    relations=relations_list or None,
+                )
+
                 emb = None
                 emb_bytes = None
                 if self._embedding_provider:
-                    emb = await self._embedding_provider.embed(fact_content)
+                    emb = await self._embedding_provider.embed(enriched)
                     if emb is not None:
                         emb_bytes = emb.tobytes()
 
@@ -189,6 +215,9 @@ class Memory:
                 profile=self.profile, session=self.session,
                 ann_index=self._ann_index,
                 min_score=effective_min_score, diverse=diverse,
+                preranker=self._preranker,
+                online_ranker=self._online_ranker,
+                blender=self._blender,
             )
             log_entry["candidate_ids"] = [r.fact.id for r in results]
             log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]
@@ -233,6 +262,10 @@ class Memory:
             # Prepend guidance but keep real results after it
             results.insert(0, SearchResult(fact=guidance_fact, score=0.0, source="guidance"))
 
+        # Stash for feedback()
+        self._last_search_results = [r for r in results if r.source != "guidance"]
+        self._last_search_query = query
+
         # Auto-update session state
         self.session.record_query(query, query_emb)
         self.session.record_results(
@@ -249,6 +282,59 @@ class Memory:
                 self.profile.update_entity(r.fact.entity_id)
 
         return results
+
+    async def feedback(self, used_fact_ids: list[int]) -> int:
+        """Train online ranking components from implicit feedback.
+
+        Call after a search when the agent knows which facts were actually used.
+        Returns the number of training updates applied.
+        """
+        if not self._last_search_results:
+            return 0
+
+        from maestro_memory.ranking.features import extract_features, features_to_dict
+
+        used_set = set(used_fact_ids)
+        n_updates = 0
+
+        for r in self._last_search_results:
+            used = r.fact.id in used_set
+            feats = extract_features(
+                query=self._last_search_query,
+                fact_content=r.fact.content,
+                fact_importance=r.fact.importance,
+                fact_access_count=r.fact.access_count,
+                fact_created_at=r.fact.created_at,
+                fact_last_accessed=r.fact.last_accessed,
+                fact_entity_id=r.fact.entity_id,
+                bm25_score=r.score,
+                embed_score=0.0,
+                graph_distance=0.0,
+                entity_affinity=(
+                    self.profile.get_affinity(r.fact.entity_id)
+                    if r.fact.entity_id else 0.0
+                ),
+                session_boost=(
+                    self.session.entity_activation.get(r.fact.entity_id, 0.0)
+                    if r.fact.entity_id else 0.0
+                ),
+            )
+            feat_dict = features_to_dict(feats)
+
+            # Train OnlineRanker (River)
+            self._online_ranker.update(feat_dict, used=used)
+
+            # Train ThompsonBlender: reward channels that sourced used facts
+            if used:
+                for ch_idx in r.channels:
+                    self._blender.update(ch_idx, reward=1.0)
+            else:
+                for ch_idx in r.channels:
+                    self._blender.update(ch_idx, reward=0.0)
+
+            n_updates += 1
+
+        return n_updates
 
     async def graph(self, entity_name: str, *, hops: int = 1) -> dict:  # noqa: ARG002
         """Graph traversal from an entity (multi-hop planned for future)."""

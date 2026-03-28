@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     from maestro_memory.core.profile import UserProfile
     from maestro_memory.core.session import SessionState
     from maestro_memory.core.store import Store
+    from maestro_memory.ranking.blender import ThompsonBlender
+    from maestro_memory.ranking.online import OnlineRanker
+    from maestro_memory.ranking.prerank import PreRanker
     from maestro_memory.retrieval.embedding import EmbeddingProvider
 
 
@@ -73,12 +76,21 @@ def rerank_results(query: str, results: list[SearchResult], limit: int) -> list[
 
 # ── RRF fusion ────────────────────────────────────────────────
 
-def reciprocal_rank_fusion(*result_lists: list[tuple[int, float]], k: int = 60) -> list[tuple[int, float]]:
-    """Fuse multiple ranked lists using Reciprocal Rank Fusion."""
+def reciprocal_rank_fusion(
+    *result_lists: list[tuple[int, float]],
+    k: int = 60,
+    weights: np.ndarray | None = None,
+) -> list[tuple[int, float]]:
+    """Fuse multiple ranked lists using Reciprocal Rank Fusion.
+
+    When *weights* is provided, each channel's RRF contribution is scaled
+    by its weight.  Otherwise all channels contribute equally (original behavior).
+    """
     scores: dict[int, float] = defaultdict(float)
-    for results in result_lists:
+    for ch_idx, results in enumerate(result_lists):
+        w = float(weights[ch_idx]) if weights is not None else 1.0
         for rank, (item_id, _) in enumerate(results):
-            scores[item_id] += 1.0 / (k + rank + 1)
+            scores[item_id] += w * 1.0 / (k + rank + 1)
     return sorted(scores.items(), key=lambda x: -x[1])
 
 
@@ -98,6 +110,9 @@ async def hybrid_search(
     ann_index: ANNIndex | None = None,
     min_score: float = 0.0,
     diverse: bool = False,
+    preranker: PreRanker | None = None,
+    online_ranker: OnlineRanker | None = None,
+    blender: ThompsonBlender | None = None,
 ) -> list[SearchResult]:
     """Orchestrate 6-channel search (BM25 + embedding + graph + user interest + time + session), fuse with RRF, optionally rerank."""
     # When reranking, fetch more candidates for the reranker to work with
@@ -158,16 +173,41 @@ async def hybrid_search(
     if session and session.entity_activation:
         session_results = await recall_session_context(store, session, limit=fetch_limit)
 
-    # RRF fusion
-    sources_to_fuse = [r for r in [bm25_results, emb_results, graph_results,
-                                    interest_results, time_results, session_results] if r]
+    # RRF fusion — optionally with Thompson-sampled channel weights
+    all_channels = [bm25_results, emb_results, graph_results,
+                    interest_results, time_results, session_results]
+    # Track which original channel indices are non-empty (for weighted RRF)
+    active_indices = [i for i, r in enumerate(all_channels) if r]
+    sources_to_fuse = [all_channels[i] for i in active_indices]
     if not sources_to_fuse:
         return []
-    fused = reciprocal_rank_fusion(*sources_to_fuse)
+
+    channel_weights: np.ndarray | None = None
+    if blender is not None and blender.n_updates > 0:
+        all_weights = blender.sample_weights()
+        channel_weights = np.array([all_weights[i] for i in active_indices])
+
+    fused = reciprocal_rank_fusion(*sources_to_fuse, weights=channel_weights)
+
+    # Build per-fact channel origin map: fact_id -> set of original channel indices
+    _fact_channels: dict[int, set[int]] = defaultdict(set)
+    for ch_idx, results in zip(active_indices, sources_to_fuse):
+        for fid, _ in results:
+            _fact_channels[fid].add(ch_idx)
 
     # 5. Load facts, filter, score — collect more candidates when reranking
     candidate_limit = fetch_limit if reranker_available else limit
     results: list[SearchResult] = []
+    # Collect per-channel scores for feature extraction
+    bm25_scores: dict[int, float] = {fid: s for fid, s in bm25_results}
+    emb_scores: dict[int, float] = {fid: s for fid, s in emb_results}
+    # Graph distance: lower rank = closer.  Convert rank to distance proxy.
+    graph_dists: dict[int, float] = {}
+    for rank, (fid, _) in enumerate(graph_results):
+        graph_dists[fid] = float(rank)
+
+    as_of_dt = datetime.fromisoformat(as_of) if as_of else None
+
     for fact_id, rrf_score in fused:
         fact = await store.get_fact(fact_id)
         if not fact:
@@ -177,7 +217,6 @@ async def hybrid_search(
         if not filtered:
             continue
 
-        as_of_dt = datetime.fromisoformat(as_of) if as_of else None
         t_score = temporal_score(fact, as_of=as_of_dt)
         # Importance boosting: facts with high importance get multiplicative boost
         importance_boost = 1.0 + fact.importance * 2  # importance 0.9 → 2.8x boost
@@ -187,10 +226,75 @@ async def hybrid_search(
         if fact.entity_id:
             entity = await store.get_entity(fact.entity_id)
 
-        results.append(SearchResult(fact=fact, score=final_score, source="fused", entity=entity))
+        results.append(SearchResult(
+            fact=fact, score=final_score, source="fused", entity=entity,
+            channels=_fact_channels.get(fact_id, set()),
+        ))
 
         if len(results) >= candidate_limit:
             break
+
+    # 5b. PreRanker: re-sort candidates using LightGBM (when model loaded)
+    if preranker is not None and preranker.is_loaded and len(results) > 1:
+        from maestro_memory.ranking.features import extract_features
+        feat_matrix = np.array([
+            extract_features(
+                query=query,
+                fact_content=r.fact.content,
+                fact_importance=r.fact.importance,
+                fact_access_count=r.fact.access_count,
+                fact_created_at=r.fact.created_at,
+                fact_last_accessed=r.fact.last_accessed,
+                fact_entity_id=r.fact.entity_id,
+                bm25_score=bm25_scores.get(r.fact.id, 0.0),
+                embed_score=emb_scores.get(r.fact.id, 0.0),
+                graph_distance=graph_dists.get(r.fact.id, -1.0),
+                entity_affinity=(
+                    profile.get_affinity(r.fact.entity_id) if profile and r.fact.entity_id else 0.0
+                ),
+                session_boost=(
+                    session.entity_activation.get(r.fact.entity_id, 0.0)
+                    if session and r.fact.entity_id else 0.0
+                ),
+            )
+            for r in results
+        ])
+        candidate_ids = [r.fact.id for r in results]
+        ranked_pairs = preranker.rank(feat_matrix, candidate_ids, limit=len(results))
+        id_to_rank = {cid: idx for idx, (cid, _) in enumerate(ranked_pairs)}
+        results.sort(key=lambda r: id_to_rank.get(r.fact.id, len(results)))
+        # Update scores from preranker
+        id_to_score = {cid: sc for cid, sc in ranked_pairs}
+        for r in results:
+            if r.fact.id in id_to_score:
+                r.score = id_to_score[r.fact.id]
+
+    # 5c. OnlineRanker: boost scores using streaming P(used) prediction
+    if online_ranker is not None and online_ranker.n_updates > 0 and len(results) > 0:
+        from maestro_memory.ranking.features import extract_features, features_to_dict
+        for r in results:
+            feats = extract_features(
+                query=query,
+                fact_content=r.fact.content,
+                fact_importance=r.fact.importance,
+                fact_access_count=r.fact.access_count,
+                fact_created_at=r.fact.created_at,
+                fact_last_accessed=r.fact.last_accessed,
+                fact_entity_id=r.fact.entity_id,
+                bm25_score=bm25_scores.get(r.fact.id, 0.0),
+                embed_score=emb_scores.get(r.fact.id, 0.0),
+                graph_distance=graph_dists.get(r.fact.id, -1.0),
+                entity_affinity=(
+                    profile.get_affinity(r.fact.entity_id) if profile and r.fact.entity_id else 0.0
+                ),
+                session_boost=(
+                    session.entity_activation.get(r.fact.entity_id, 0.0)
+                    if session and r.fact.entity_id else 0.0
+                ),
+            )
+            online_pred = online_ranker.predict(features_to_dict(feats))
+            r.score *= (0.5 + online_pred)  # range 0.5x–1.5x
+        results.sort(key=lambda r: -r.score)
 
     # 6. Cross-encoder rerank (if available and enabled)
     if reranker_available and len(results) > limit:

@@ -174,8 +174,9 @@ class Memory:
 
         # Auto-detect aggregation queries → enable MMR diversity
         query_lower = query.lower()
-        agg_words = {"all", "list", "every", "how many", "conditions", "complete",
-                      "total", "what are", "pitfall", "issue", "watch out", "careful", "handle"}
+        agg_words = {"all", "list", "every", "how many", "conditions", "complete", "total",
+                     "what are", "pitfall", "issue", "watch out", "watch for", "careful",
+                     "handle", "should i", "must i", "need to", "steps", "checklist"}
         if any(w in query_lower for w in agg_words):
             diverse = True
             limit = max(limit, 15)  # more results for aggregation

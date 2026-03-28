@@ -180,7 +180,7 @@ async def hybrid_search(
         as_of_dt = datetime.fromisoformat(as_of) if as_of else None
         t_score = temporal_score(fact, as_of=as_of_dt)
         # Importance boosting: facts with high importance get multiplicative boost
-        importance_boost = 1.0 + fact.importance  # importance 0.5 → 1.5x, importance 0.9 → 1.9x
+        importance_boost = 1.0 + fact.importance * 2  # importance 0.9 → 2.8x boost
         final_score = rrf_score * t_score * importance_boost
 
         entity = None

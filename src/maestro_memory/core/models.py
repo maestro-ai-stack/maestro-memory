@@ -102,7 +102,9 @@ class SearchMeta:
                       "many", "very", "s", "t", "re", "ll", "ve", "d", "m"}
         query_terms = {w for w in re.findall(r"[a-zA-Z]+", query_lower) if w not in stopwords and len(w) > 2}
         all_result_text = " ".join(r.fact.content.lower() for r in results if r.source != "guidance")
-        covered = {t for t in query_terms if t in all_result_text}
+        # Normalize numbers: remove commas in numbers for matching
+        all_result_normalized = re.sub(r'(\d),(\d)', r'\1\2', all_result_text)
+        covered = {t for t in query_terms if t in all_result_text or t in all_result_normalized}
         uncovered = query_terms - covered
 
         # If significant query terms are missing from ALL results → low confidence

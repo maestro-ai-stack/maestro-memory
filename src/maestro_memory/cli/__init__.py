@@ -23,36 +23,21 @@ app.add_typer(config_app, name="config")
 
 @app.command("server-start")
 def server_start_cmd(
-    port: int = typer.Option(19830, help="Server port"),
+    foreground: bool = typer.Option(False, "--foreground", "-f", help="Run in foreground (not daemon)"),
     project: str = typer.Option(None, help="Project name"),
-    daemon: bool = typer.Option(True, "--daemon/--foreground", help="Run as background daemon"),
 ):
     """Start mmem daemon server (pre-loads models, holds DB open)."""
-    import subprocess
-    import sys
-    from pathlib import Path
-
-    if daemon:
-        pid_file = Path.home() / ".maestro" / "memory" / "server.pid"
-        pid_file.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [sys.executable, "-m", "maestro_memory.server", "--port", str(port)]
-        if project:
-            cmd.extend(["--project", project])
-        proc = subprocess.Popen(
-            cmd,
-            stdout=open(pid_file.with_suffix(".log"), "w"),
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        pid_file.write_text(str(proc.pid))
-        typer.echo(f"Server started (pid={proc.pid}, port={port})")
-    else:
+    if foreground:
         import uvicorn
-
         from maestro_memory.server.app import create_app
-
-        a = create_app(project=project)
-        uvicorn.run(a, host="127.0.0.1", port=port)
+        app_ = create_app(project=project)
+        uvicorn.run(app_, host="127.0.0.1", port=19830)
+    else:
+        from maestro_memory.cli.daemon import ensure_daemon
+        if ensure_daemon():
+            typer.echo("Server running on http://localhost:19830")
+        else:
+            typer.echo("Failed to start server. Check ~/.maestro/memory/server.log")
 
 
 @app.command("server-install")

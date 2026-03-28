@@ -5,16 +5,15 @@ from typing import Optional
 
 import typer
 
-from maestro_memory.core.memory import Memory
-
 
 async def _try_daemon_search(query: str, limit: int) -> list[dict] | None:
-    """Try daemon first, return None if not available."""
+    """Ensure daemon is running, then search via HTTP. Returns None if unavailable."""
     try:
+        from maestro_memory.cli.daemon import ensure_daemon
+        if not ensure_daemon():
+            return None
         from maestro_memory.client import MemoryClient
-
         client = MemoryClient()
-        await client.health()
         results = await client.search(query, limit=limit, rerank=True)
         await client.close()
         return results
@@ -51,7 +50,8 @@ async def _search(
                 typer.echo(f"{i}. [{r['score']:.4f}]{entity_str} {r['content']}")
             return
 
-    # Fallback to direct Memory access
+    # Fallback to direct Memory access (lazy import to avoid model loading)
+    from maestro_memory.core.memory import Memory
     mem = Memory(project=project)
     await mem.init()
     try:

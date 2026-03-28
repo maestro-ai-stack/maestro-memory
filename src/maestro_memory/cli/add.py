@@ -6,16 +6,15 @@ from typing import Optional
 
 import typer
 
-from maestro_memory.core.memory import Memory
-
 
 async def _try_daemon_add(content: str, **kwargs) -> dict | None:
-    """Try daemon first, return None if not available."""
+    """Ensure daemon is running, then add via HTTP. Returns None if unavailable."""
     try:
+        from maestro_memory.cli.daemon import ensure_daemon
+        if not ensure_daemon():
+            return None
         from maestro_memory.client import MemoryClient
-
         client = MemoryClient()
-        await client.health()
         result = await client.add(content, **kwargs)
         await client.close()
         return result
@@ -74,7 +73,8 @@ async def _add(
                         f"invalidated={daemon_result.get('facts_invalidated', 0)} entities={daemon_result['entities_created']}")
             return
 
-    # Fallback to direct Memory access
+    # Fallback to direct Memory access (lazy import to avoid model loading)
+    from maestro_memory.core.memory import Memory
     mem = Memory(project=project)
     await mem.init()
     try:

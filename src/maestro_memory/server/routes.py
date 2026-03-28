@@ -51,8 +51,13 @@ async def health():
     return {"status": "ok", **stats}
 
 
+class SearchResponse(BaseModel):
+    results: list[SearchResultItem]
+    meta: dict  # confidence, best_score, hint — guides agent behavior
+
+
 @router.post("/search")
-async def search(req: SearchRequest) -> list[SearchResultItem]:
+async def search(req: SearchRequest) -> SearchResponse:
     mem = get_memory()
     results = await mem.search(
         req.query,
@@ -61,7 +66,7 @@ async def search(req: SearchRequest) -> list[SearchResultItem]:
         as_of=req.as_of,
         rerank=req.rerank,
     )
-    return [
+    items = [
         SearchResultItem(
             fact_id=r.fact.id,
             content=r.fact.content,
@@ -72,6 +77,16 @@ async def search(req: SearchRequest) -> list[SearchResultItem]:
         )
         for r in results
     ]
+    meta = mem.last_search_meta
+    return SearchResponse(
+        results=items,
+        meta={
+            "confidence": meta.confidence if meta else "high",
+            "best_score": meta.best_score if meta else 0.0,
+            "hint": meta.hint if meta else "",
+            "suggestion": meta.suggestion if meta else None,
+        },
+    )
 
 
 @router.post("/add")

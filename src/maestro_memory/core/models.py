@@ -58,6 +58,59 @@ class SearchResult:
 
 
 @dataclass
+class SearchMeta:
+    """Search quality metadata — embedded in output to guide agent behavior."""
+    confidence: str = "high"  # high | medium | low | none
+    best_score: float = 0.0
+    hint: str = ""
+    suggestion: str | None = None  # suggested follow-up search
+
+    @staticmethod
+    def from_results(query: str, results: list[SearchResult], threshold: float = 0.001) -> SearchMeta:
+        if not results:
+            return SearchMeta(
+                confidence="none", best_score=0.0,
+                hint="No relevant data found. This topic may not be in memory.",
+                suggestion=None,
+            )
+
+        best = results[0].score
+        entities = {r.fact.entity_id for r in results if r.fact.entity_id}
+        entity_names = {r.entity.name for r in results if r.entity}
+        query_lower = query.lower()
+
+        # Confidence based on score relative to threshold
+        if best < threshold * 2:
+            confidence = "low"
+            hint = "Results have very low relevance. This topic may not be in memory."
+        elif best < threshold * 10:
+            confidence = "medium"
+            hint = "Results have moderate relevance."
+        else:
+            confidence = "high"
+            hint = ""
+
+        suggestion = None
+
+        # Aggregation detection
+        agg_words = {"all", "list", "every", "how many", "what are the", "conditions", "complete", "total"}
+        if any(w in query_lower for w in agg_words):
+            if len(entities) <= 2 and len(results) >= 3:
+                hint = "Results cluster around few topics. Run additional searches to gather scattered facts."
+                if entity_names:
+                    suggestion = f"Try narrower searches for specific aspects of: {query}"
+            elif len(results) < 5:
+                hint = "Few results found. There may be more relevant facts under different search terms."
+
+        return SearchMeta(
+            confidence=confidence,
+            best_score=best,
+            hint=hint.strip(),
+            suggestion=suggestion,
+        )
+
+
+@dataclass
 class AddResult:
     episode_id: int
     facts_added: int = 0

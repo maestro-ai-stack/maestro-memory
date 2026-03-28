@@ -93,13 +93,35 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     },
                 )
                 resp.raise_for_status()
-                results = resp.json()
-                if not results:
-                    return [TextContent(type="text", text="No results found.")]
+                data = resp.json()
+
+                meta = data.get("meta", {})
+                results = data.get("results", [])
+
                 lines = []
+                # Agent guidance header
+                confidence = meta.get("confidence", "high")
+                hint = meta.get("hint", "")
+                suggestion = meta.get("suggestion")
+
+                if confidence == "none":
+                    return [TextContent(type="text", text="[NO RELEVANT DATA] This topic is not in memory.")]
+                if confidence == "low":
+                    lines.append(f"[LOW CONFIDENCE] {hint}")
+                elif hint:
+                    lines.append(f"[NOTE] {hint}")
+
+                if not results:
+                    lines.append("No results found.")
+                    return [TextContent(type="text", text="\n".join(lines))]
+
                 for i, r in enumerate(results, 1):
                     entity = f" [{r.get('entity_name', '')}]" if r.get("entity_name") else ""
                     lines.append(f"{i}. [{r['score']:.4f}]{entity} {r['content']}")
+
+                if suggestion:
+                    lines.append(f"\n[SUGGESTION] {suggestion}")
+
                 return [TextContent(type="text", text="\n".join(lines))]
 
             elif name == "mem_add":

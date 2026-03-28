@@ -33,7 +33,10 @@ async def test_client_add_and_search(server_and_client):
     result = await client.add("User likes dark mode")
     assert result["facts_added"] >= 1
 
-    results = await client.search("dark mode", rerank=False)
+    data = await client.search("dark mode", rerank=False)
+    assert "results" in data
+    assert "meta" in data
+    results = data["results"]
     assert len(results) >= 1
     assert "dark mode" in results[0]["content"]
 

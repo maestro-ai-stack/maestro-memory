@@ -31,6 +31,8 @@ class Memory:
         self.store = Store(self._db_path)
         self._embedding_provider = None
         self.session = SessionState()
+        self.last_search_meta = None  # populated after every search()
+        self._confidence_threshold = 0.001
         self.profile = UserProfile()
         self._preranker = PreRanker()
         self._online_ranker = OnlineRanker()
@@ -43,6 +45,10 @@ class Memory:
         self._serving_logger = ServingLogger(self.store)
         self.profile = await self.store.load_profile()
         self._embedding_provider = get_embedding_provider()
+
+        # Compute adaptive confidence threshold from feedback logs
+        from maestro_memory.retrieval.confidence import compute_threshold
+        self._confidence_threshold = await compute_threshold(self.store)
 
         # Build ANN index from existing embeddings
         cur = await self.store.db.execute("SELECT id, embedding FROM facts WHERE embedding IS NOT NULL")
@@ -164,6 +170,8 @@ class Memory:
         if self._embedding_provider:
             query_emb = await self._embedding_provider.embed(query)
 
+        effective_min_score = min_score if min_score > 0 else self._confidence_threshold
+
         async with self._serving_logger.log_search(query) as log_entry:
             results = await hybrid_search(
                 self.store, query, self._embedding_provider,
@@ -171,7 +179,7 @@ class Memory:
                 rerank=rerank,
                 profile=self.profile, session=self.session,
                 ann_index=self._ann_index,
-                min_score=min_score, diverse=diverse,
+                min_score=effective_min_score, diverse=diverse,
             )
             log_entry["candidate_ids"] = [r.fact.id for r in results]
             log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]
@@ -199,6 +207,10 @@ class Memory:
                     {name: float(feats[i]) for i, name in enumerate(FEATURE_NAMES)}
                 )
             log_entry["features_json"] = json.dumps(features_list)
+
+        # Compute search metadata (confidence + hints for agent)
+        from maestro_memory.core.models import SearchMeta
+        self.last_search_meta = SearchMeta.from_results(query, results, threshold=self._confidence_threshold)
 
         # Auto-update session state
         self.session.record_query(query, query_emb)

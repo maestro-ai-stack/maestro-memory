@@ -6,7 +6,36 @@ from typing import Optional
 import typer
 
 
-async def _try_daemon_search(query: str, limit: int) -> list[dict] | None:
+def _print_meta(meta: dict) -> None:
+    """Print agent guidance from daemon search metadata."""
+    conf = meta.get("confidence", "high")
+    hint = meta.get("hint", "")
+    suggestion = meta.get("suggestion")
+    if conf == "none":
+        typer.echo("[CONFIDENCE: NONE] No relevant data found. This topic may not be in memory.")
+    elif conf == "low":
+        typer.echo(f"[CONFIDENCE: LOW] Results may not be relevant to your query.{' ' + hint if hint else ''}")
+    elif conf == "medium" and hint:
+        typer.echo(f"[NOTE] {hint}")
+    elif hint:
+        typer.echo(f"[NOTE] {hint}")
+    if suggestion:
+        typer.echo(f"[SUGGESTION] {suggestion}")
+
+
+def _print_meta_obj(meta) -> None:
+    """Print agent guidance from SearchMeta object."""
+    if meta.confidence == "none":
+        typer.echo("[CONFIDENCE: NONE] No relevant data found. This topic may not be in memory.")
+    elif meta.confidence == "low":
+        typer.echo(f"[CONFIDENCE: LOW] Results may not be relevant.{' ' + meta.hint if meta.hint else ''}")
+    elif meta.hint:
+        typer.echo(f"[NOTE] {meta.hint}")
+    if meta.suggestion:
+        typer.echo(f"[SUGGESTION] {meta.suggestion}")
+
+
+async def _try_daemon_search(query: str, limit: int) -> dict | None:
     """Ensure daemon is running, then search via HTTP. Returns None if unavailable."""
     try:
         from maestro_memory.cli.daemon import ensure_daemon
@@ -14,9 +43,9 @@ async def _try_daemon_search(query: str, limit: int) -> list[dict] | None:
             return None
         from maestro_memory.client import MemoryClient
         client = MemoryClient()
-        results = await client.search(query, limit=limit, rerank=True)
+        result = await client.search(query, limit=limit, rerank=True)
         await client.close()
-        return results
+        return result  # dict with "results" and "meta"
     except Exception:
         return None
 
@@ -42,10 +71,15 @@ async def _search(
     if not entity and not as_of and current and not project:
         daemon_results = await _try_daemon_search(query, limit)
         if daemon_results is not None:
-            if not daemon_results:
-                typer.echo("No results found.")
+            meta = daemon_results.get("meta") if isinstance(daemon_results, dict) else None
+            items = daemon_results.get("results", daemon_results) if isinstance(daemon_results, dict) else daemon_results
+            # Print agent guidance header
+            if meta:
+                _print_meta(meta)
+            if not items:
+                typer.echo("No results found. This topic may not be in memory.")
                 return
-            for i, r in enumerate(daemon_results, 1):
+            for i, r in enumerate(items, 1):
                 entity_str = f" [{r.get('entity_name', '')}]" if r.get("entity_name") else ""
                 typer.echo(f"{i}. [{r['score']:.4f}]{entity_str} {r['content']}")
             return
@@ -67,8 +101,11 @@ async def _search(
                 typer.echo(f"  -> {rel.predicate} (confidence={rel.confidence:.2f})")
         else:
             results = await mem.search(query, limit=limit, current_only=current, as_of=as_of)
+            # Print agent guidance from search metadata
+            if mem.last_search_meta:
+                _print_meta_obj(mem.last_search_meta)
             if not results:
-                typer.echo("No results found.")
+                typer.echo("No results found. This topic may not be in memory.")
                 return
             for i, r in enumerate(results, 1):
                 entity_str = f" [{r.entity.name}]" if r.entity else ""

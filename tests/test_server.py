@@ -42,9 +42,17 @@ async def test_add_and_search(client):
     # Search for it
     resp = await client.post("/search", json={"query": "editor preferences", "limit": 5, "rerank": False})
     assert resp.status_code == 200
-    results = resp.json()
+    data = resp.json()
+    assert "results" in data
+    assert "meta" in data
+    results = data["results"]
     assert len(results) >= 1
     assert "dark mode" in results[0]["content"]
+    # Verify meta structure
+    meta = data["meta"]
+    assert "confidence" in meta
+    assert "best_score" in meta
+    assert "suggestion" in meta
 
 
 @pytest.mark.asyncio

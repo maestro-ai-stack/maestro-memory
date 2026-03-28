@@ -12,6 +12,7 @@ from maestro_memory.retrieval.bm25 import fts5_search_entities, fts5_search_fact
 from maestro_memory.retrieval.channels import recall_session_context, recall_time_window, recall_user_interest
 from maestro_memory.retrieval.embedding import cosine_top_k
 from maestro_memory.retrieval.graph import graph_neighbors
+from maestro_memory.retrieval.query_expansion import expand_query
 from maestro_memory.retrieval.temporal import filter_temporal, temporal_score
 
 if TYPE_CHECKING:
@@ -101,27 +102,39 @@ async def hybrid_search(
     reranker_available = rerank and _get_reranker() is not None
     fetch_limit = limit * (5 if reranker_available else 3)
 
-    # 1. BM25 search
-    bm25_results = await fts5_search_facts(store, query, limit=fetch_limit)
+    # Multi-query expansion: generate 1-4 variant queries
+    queries = expand_query(query)
 
-    # 2. Embedding search (ANN index preferred, brute-force fallback)
+    # 1. BM25 search (union across all query variants)
+    bm25_results: list[tuple[int, float]] = []
+    bm25_seen: set[int] = set()
+    for q in queries:
+        hits = await fts5_search_facts(store, q, limit=fetch_limit)
+        for fid, score in hits:
+            if fid not in bm25_seen:
+                bm25_seen.add(fid)
+                bm25_results.append((fid, score))
+
+    # 2. Embedding search (union across all query variants)
     emb_results: list[tuple[int, float]] = []
     if embedding_provider:
-        query_emb = await embedding_provider.embed(query)
-        if query_emb is not None:
+        emb_seen: set[int] = set()
+        for q in queries:
+            query_emb = await embedding_provider.embed(q)
+            if query_emb is None:
+                continue
             ann = ann_index or get_ann_index()
             if ann is not None and ann.size > 0:
-                emb_results = ann.search(query_emb, k=fetch_limit)
+                hits = ann.search(query_emb, k=fetch_limit)
             else:
-                # Brute-force fallback: load all embeddings from DB
                 cur = await store.db.execute("SELECT id, embedding FROM facts WHERE embedding IS NOT NULL")
                 rows = await cur.fetchall()
-                fact_embeddings = []
-                for row in rows:
-                    emb = np.frombuffer(row[1], dtype=np.float32)
-                    fact_embeddings.append((row[0], emb))
-                if fact_embeddings:
-                    emb_results = cosine_top_k(query_emb, fact_embeddings, k=fetch_limit)
+                fact_embeddings = [(row[0], np.frombuffer(row[1], dtype=np.float32)) for row in rows]
+                hits = cosine_top_k(query_emb, fact_embeddings, k=fetch_limit) if fact_embeddings else []
+            for fid, score in hits:
+                if fid not in emb_seen:
+                    emb_seen.add(fid)
+                    emb_results.append((fid, score))
 
     # 3. Graph expansion
     graph_results: list[tuple[int, float]] = []

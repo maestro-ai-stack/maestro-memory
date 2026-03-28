@@ -67,6 +67,16 @@ def expand_query(query: str) -> list[str]:
         item, source = from_match.group(1), from_match.group(2)
         variants.append(f"{source} {item}")
 
+    # 5. Negation-aware expansion: "why don't we use X" → also search "rejected X", "instead of X"
+    negation_match = re.search(
+        r"(?:why\s+)?(?:don'?t|doesn'?t|can'?t|shouldn'?t|not|never)\s+(?:we\s+)?(?:use|do|apply|choose|pick)\s+(.+?)(?:\?|$)",
+        query, re.IGNORECASE,
+    )
+    if negation_match:
+        rejected_thing = negation_match.group(1).strip().rstrip("?")
+        variants.append(f"rejected {rejected_thing}")
+        variants.append(f"instead of {rejected_thing}")
+
     # Deduplicate while preserving order
     seen = set()
     unique = []

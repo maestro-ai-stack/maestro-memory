@@ -73,6 +73,12 @@ class Memory:
 
         Agent can specify entity_name directly, skipping LLM extraction.
         """
+        # Auto-detect importance from content keywords
+        if importance == 0.5:  # only if not explicitly set
+            content_upper = content.upper()
+            if any(kw in content_upper for kw in ["CRITICAL", "IMPORTANT", "MUST", "NEVER", "DO NOT"]):
+                importance = 0.9
+
         episode_id = await self.store.add_episode(content, source_type, source_ref)
 
         # Agent provides entity directly -> skip LLM extraction
@@ -146,6 +152,8 @@ class Memory:
         current_only: bool = True,
         as_of: str | None = None,
         rerank: bool = True,
+        min_score: float = 0.0,
+        diverse: bool = False,
     ) -> list[SearchResult]:
         """Hybrid search pipeline with optional cross-encoder reranking.
 
@@ -163,6 +171,7 @@ class Memory:
                 rerank=rerank,
                 profile=self.profile, session=self.session,
                 ann_index=self._ann_index,
+                min_score=min_score, diverse=diverse,
             )
             log_entry["candidate_ids"] = [r.fact.id for r in results]
             log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]

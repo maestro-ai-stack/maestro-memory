@@ -96,6 +96,8 @@ async def hybrid_search(
     profile: UserProfile | None = None,
     session: SessionState | None = None,
     ann_index: ANNIndex | None = None,
+    min_score: float = 0.0,
+    diverse: bool = False,
 ) -> list[SearchResult]:
     """Orchestrate 6-channel search (BM25 + embedding + graph + user interest + time + session), fuse with RRF, optionally rerank."""
     # When reranking, fetch more candidates for the reranker to work with
@@ -177,7 +179,9 @@ async def hybrid_search(
 
         as_of_dt = datetime.fromisoformat(as_of) if as_of else None
         t_score = temporal_score(fact, as_of=as_of_dt)
-        final_score = rrf_score * t_score
+        # Importance boosting: facts with high importance get multiplicative boost
+        importance_boost = 1.0 + fact.importance  # importance 0.5 → 1.5x, importance 0.9 → 1.9x
+        final_score = rrf_score * t_score * importance_boost
 
         entity = None
         if fact.entity_id:
@@ -193,5 +197,21 @@ async def hybrid_search(
         results = rerank_results(query, results, limit)
     else:
         results = results[:limit]
+
+    # 7. MMR diversity reranking (for aggregation queries)
+    if diverse and embedding_provider and len(results) > 1:
+        from maestro_memory.retrieval.mmr import mmr_rerank
+        fact_embeddings: dict[int, np.ndarray] = {}
+        for r in results:
+            cur = await store.db.execute("SELECT embedding FROM facts WHERE id = ?", (r.fact.id,))
+            row = await cur.fetchone()
+            if row and row[0]:
+                fact_embeddings[r.fact.id] = np.frombuffer(row[0], dtype=np.float32)
+        query_emb = await embedding_provider.embed(query)
+        results = mmr_rerank(results, fact_embeddings, query_emb, lambda_param=0.6, limit=limit)
+
+    # 8. Confidence gate: filter results below min_score
+    if min_score > 0:
+        results = [r for r in results if r.score >= min_score]
 
     return results

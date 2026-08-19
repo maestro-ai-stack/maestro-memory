@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import abc
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+logger = logging.getLogger("mmem.embedding")
 
 if TYPE_CHECKING:
     from numpy import ndarray
@@ -68,20 +71,44 @@ _MODEL_PROVIDERS: dict[str, type[EmbeddingProvider]] = {
     "all-MiniLM-L6-v2": LocalEmbeddingProvider,
 }
 
+# Short names accepted in config.toml, resolved to sentence-transformers ids.
+# Any id sentence-transformers understands may also be given verbatim.
+_MODEL_ALIASES: dict[str, str] = {
+    "bge-m3": "BAAI/bge-m3",
+    "multilingual-e5-small": "intfloat/multilingual-e5-small",
+    "multilingual-e5-base": "intfloat/multilingual-e5-base",
+    "embeddinggemma": "google/embeddinggemma-300m",
+}
+
 
 def get_embedding_provider(provider: str = "local", model: str = "all-MiniLM-L6-v2") -> EmbeddingProvider:
-    """Factory: return the best available provider, gracefully falling back."""
+    """Factory: return the configured provider.
+
+    Degradation to :class:`NullEmbeddingProvider` is announced loudly. A silent
+    fallback here disables semantic recall entirely while search keeps returning
+    plausible lexical results, so the failure is invisible — the mode that left
+    the predecessor system without embeddings for two and a half months.
+    """
     if provider != "local":
+        logger.warning(
+            "embedding provider %r is not supported; semantic recall is DISABLED "
+            "and search will fall back to keyword matching only", provider,
+        )
         return NullEmbeddingProvider()
     try:
         import sentence_transformers as _st  # noqa: F401
         _ = _st
     except ImportError:
+        logger.warning(
+            "sentence-transformers is not installed; semantic recall is DISABLED "
+            "and search will fall back to keyword matching only. "
+            "Install it with: pip install 'maestro-memory[dense]'",
+        )
         return NullEmbeddingProvider()
-    cls = _MODEL_PROVIDERS.get(model)
-    if cls is BGEEmbeddingProvider:
+    resolved = _MODEL_ALIASES.get(model, model)
+    if _MODEL_PROVIDERS.get(model) is BGEEmbeddingProvider:
         return BGEEmbeddingProvider()
-    return LocalEmbeddingProvider(model)
+    return LocalEmbeddingProvider(resolved)
 
 
 def cosine_similarity(a: ndarray, b: ndarray) -> float:

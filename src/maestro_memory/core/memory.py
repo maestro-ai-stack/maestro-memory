@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from maestro_memory.core.config import get_db_path
+from maestro_memory.core.config import get_db_path, load_config
 from maestro_memory.core.models import AddResult, SearchResult
 from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.session import SessionState
@@ -47,7 +47,14 @@ class Memory:
         await self.store.init()
         self._serving_logger = ServingLogger(self.store)
         self.profile = await self.store.load_profile()
-        self._embedding_provider = get_embedding_provider()
+        # Read the configured model. This previously called get_embedding_provider()
+        # with no arguments, so [embedding] in config.toml was never consulted and
+        # the model was pinned to the factory default regardless of configuration.
+        _emb_cfg = load_config().get("embedding", {})
+        self._embedding_provider = get_embedding_provider(
+            provider=_emb_cfg.get("provider", "local"),
+            model=_emb_cfg.get("model", "all-MiniLM-L6-v2"),
+        )
 
         # Compute adaptive confidence threshold from feedback logs
         from maestro_memory.retrieval.confidence import compute_threshold
@@ -186,6 +193,8 @@ class Memory:
         rerank: bool = True,
         min_score: float = 0.0,
         diverse: bool = False,
+        activation_weighting: bool = True,
+        query_independent_channels: bool = True,
     ) -> list[SearchResult]:
         """Hybrid search pipeline with optional cross-encoder reranking.
 
@@ -218,6 +227,8 @@ class Memory:
                 preranker=self._preranker,
                 online_ranker=self._online_ranker,
                 blender=self._blender,
+                activation_weighting=activation_weighting,
+                query_independent_channels=query_independent_channels,
             )
             log_entry["candidate_ids"] = [r.fact.id for r in results]
             log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]

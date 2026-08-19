@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 from maestro_memory.core.models import Fact
 
@@ -32,6 +32,16 @@ def temporal_score(
         created = datetime.fromisoformat(fact.created_at)
     except (ValueError, TypeError):
         created = now
+
+    # Timestamps reach this table from two sources: mmem's own writes use
+    # SQLite datetime('now'), which is naive, while imported rows can carry an
+    # ISO-8601 offset. Subtracting across the two raises TypeError and takes the
+    # whole search down, so normalise to a common naive UTC basis first.
+    if (created.tzinfo is None) != (now.tzinfo is None):
+        if created.tzinfo is not None:
+            created = created.astimezone(timezone.utc).replace(tzinfo=None)
+        if now.tzinfo is not None:
+            now = now.astimezone(timezone.utc).replace(tzinfo=None)
 
     days_old = max((now - created).total_seconds() / 86400, 0)
 

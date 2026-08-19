@@ -163,7 +163,15 @@ def recorded_cases(gold: list[dict]) -> list[tuple[str, set[str], list[str]]]:
 
 
 async def mmem_cases(
-    gold: list[dict], limit: int, db: Path | None = None
+    gold: list[dict],
+    limit: int,
+    db: Path | None = None,
+    *,
+    rerank: bool = True,
+    min_score: float = 0.0,
+    current_only: bool = True,
+    activation_weighting: bool = True,
+    query_independent_channels: bool = True,
 ) -> list[tuple[str, set[str], list[str]]]:
     """Replay the gold set through maestro-memory.
 
@@ -184,7 +192,11 @@ async def mmem_cases(
         if not query or not relevant:
             cases.append((query, relevant, []))
             continue
-        results = await mem.search(query, limit=limit)
+        results = await mem.search(
+            query, limit=limit, rerank=rerank, min_score=min_score,
+            current_only=current_only, activation_weighting=activation_weighting,
+            query_independent_channels=query_independent_channels,
+        )
         ranked = [norm_key(getattr(r.fact, "content", "") or "") for r in results]
         cases.append((query, relevant, ranked))
     return cases
@@ -200,6 +212,13 @@ def main() -> int:
     ap.add_argument("--engine", choices=["mmem"], help="score a live engine")
     ap.add_argument("--db", type=Path, help="engine DB path; use a scratch copy — search() writes serving_logs")
     ap.add_argument("--limit", type=int, default=15, help="results per query (gold averages 14.9)")
+    ap.add_argument("--no-rerank", action="store_true", help="ablation: skip cross-encoder reranking")
+    ap.add_argument("--query-only-channels", action="store_true",
+                    help="ablation: drop the recency/interest/session channels that ignore the query")
+    ap.add_argument("--no-activation", action="store_true",
+                    help="ablation: drop the ACT-R recency/importance multiplier applied after RRF")
+    ap.add_argument("--min-score", type=float, default=0.0, help="ablation: score floor")
+    ap.add_argument("--all-time", action="store_true", help="ablation: include superseded facts")
     ap.add_argument("--baseline", type=Path, help="compare against a saved report; non-zero exit on regression")
     ap.add_argument("--save", type=Path, help="write the report as JSON")
     ap.add_argument("--tolerance", type=float, default=0.0, help="allowed MRR drop before failing")
@@ -214,8 +233,23 @@ def main() -> int:
         rep = score(recorded_cases(gold))
         title = f"RECORDED (as served) — {args.gold.name}"
     else:
-        rep = score(asyncio.run(mmem_cases(gold, args.limit, args.db)))
-        title = f"ENGINE=mmem ({args.db or 'default store'}) — {args.gold.name}"
+        rep = score(
+            asyncio.run(
+                mmem_cases(
+                    gold,
+                    args.limit,
+                    args.db,
+                    rerank=not args.no_rerank,
+                    min_score=args.min_score,
+                    current_only=not args.all_time,
+                    activation_weighting=not args.no_activation,
+                    query_independent_channels=not args.query_only_channels,
+                )
+            )
+        )
+        flags = (f"rerank={not args.no_rerank} activation={not args.no_activation} "
+                 f"min_score={args.min_score} current_only={not args.all_time}")
+        title = f"ENGINE=mmem [{flags}] — {args.gold.name}"
 
     print(rep.render(title))
     if rep.misses:

@@ -113,6 +113,8 @@ async def hybrid_search(
     preranker: PreRanker | None = None,
     online_ranker: OnlineRanker | None = None,
     blender: ThompsonBlender | None = None,
+    activation_weighting: bool = True,
+    query_independent_channels: bool = True,
 ) -> list[SearchResult]:
     """Orchestrate 6-channel search (BM25 + embedding + graph + user interest + time + session), fuse with RRF, optionally rerank."""
     # When reranking, fetch more candidates for the reranker to work with
@@ -160,17 +162,24 @@ async def hybrid_search(
         entity_ids = [eid for eid, _ in entity_hits]
         graph_results = await graph_neighbors(store, entity_ids, hops=2, current_only=current_only)
 
+    # Channels 4-6 do not read the query at all: they return recent facts, the
+    # user's habitual entities, and the current session's entities. Under RRF a
+    # fact ranked #1 by recency contributes exactly as much as one ranked #1 by
+    # BM25, so they inject query-irrelevant candidates on equal footing.
     # 4. User interest channel
     interest_results: list[tuple[int, float]] = []
-    if profile and profile.entity_affinity:
+    if query_independent_channels and profile and profile.entity_affinity:
         interest_results = await recall_user_interest(store, profile, limit=fetch_limit)
 
     # 5. Time window channel
-    time_results = await recall_time_window(store, days=7, limit=fetch_limit)
+    time_results = (
+        await recall_time_window(store, days=7, limit=fetch_limit)
+        if query_independent_channels else []
+    )
 
     # 6. Session context channel
     session_results: list[tuple[int, float]] = []
-    if session and session.entity_activation:
+    if query_independent_channels and session and session.entity_activation:
         session_results = await recall_session_context(store, session, limit=fetch_limit)
 
     # RRF fusion — optionally with Thompson-sampled channel weights
@@ -217,10 +226,19 @@ async def hybrid_search(
         if not filtered:
             continue
 
-        t_score = temporal_score(fact, as_of=as_of_dt)
-        # Importance boosting: facts with high importance get multiplicative boost
-        importance_boost = 1.0 + fact.importance * 2  # importance 0.9 → 2.8x boost
-        final_score = rrf_score * t_score * importance_boost
+        # Recency/frequency is already channel 5 of the fusion above. Multiplying
+        # the fused score by ACT-R activation as well double-counts it, and the
+        # activation term spans roughly two orders of magnitude: a fact with
+        # access_count=0 that is 150 days old scores ~0.04, so any older memory is
+        # driven below every recent one regardless of how well it matches the
+        # query. Measured on the real labelled query set, this alone dropped
+        # answer-present from 98% (BM25 top-50) to 28% (fused top-15).
+        if activation_weighting:
+            t_score = temporal_score(fact, as_of=as_of_dt)
+            importance_boost = 1.0 + fact.importance * 2  # importance 0.9 → 2.8x boost
+            final_score = rrf_score * t_score * importance_boost
+        else:
+            final_score = rrf_score
 
         entity = None
         if fact.entity_id:

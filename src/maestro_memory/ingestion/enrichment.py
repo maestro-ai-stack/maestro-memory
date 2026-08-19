@@ -16,6 +16,16 @@ _FACT_TYPE_LABELS: dict[str, str] = {
     "rule": "business rule",
     "metric": "metric definition",
     "guidance": "system guidance",
+    # Types carried over from the mnerve knowledge graph. Preserved verbatim as
+    # fact_type so the migration is lossless; labelled here so enrichment still
+    # produces a meaningful embedding context for them.
+    "experience": "recorded experience",
+    "fact": "general fact",
+    "method": "method or technique",
+    "concept": "concept or tool",
+    "person": "person",
+    "project": "project",
+    "entity": "named entity",
 }
 
 # Map predicate verbs to grouping labels for relation formatting

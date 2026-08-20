@@ -14,7 +14,10 @@ class SearchRequest(BaseModel):
     limit: int = 10
     current_only: bool = True
     as_of: str | None = None
-    rerank: bool = True
+    # None means "whatever Memory.search defaults to". Restating the literal
+    # here made the engine default cosmetic: every request arrived carrying an
+    # explicit override, so changing the library changed nothing that ships.
+    rerank: bool | None = None
 
 
 class SearchResultItem(BaseModel):
@@ -64,7 +67,7 @@ async def search(req: SearchRequest) -> SearchResponse:
         limit=req.limit,
         current_only=req.current_only,
         as_of=req.as_of,
-        rerank=req.rerank,
+        **({} if req.rerank is None else {"rerank": req.rerank}),
     )
     items = [
         SearchResultItem(

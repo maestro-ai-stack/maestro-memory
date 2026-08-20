@@ -89,7 +89,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     json={
                         "query": arguments["query"],
                         "limit": arguments.get("limit", 10),
-                        "rerank": True,
                     },
                 )
                 resp.raise_for_status()

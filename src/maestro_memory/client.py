@@ -22,12 +22,13 @@ class MemoryClient:
         return self._http
 
     async def search(
-        self, query: str, limit: int = 10, rerank: bool = True, **kwargs
+        self, query: str, limit: int = 10, rerank: bool | None = None, **kwargs
     ) -> dict:
         http = await self._get_http()
-        resp = await http.post(
-            "/search", json={"query": query, "limit": limit, "rerank": rerank, **kwargs}
-        )
+        body: dict = {"query": query, "limit": limit, **kwargs}
+        if rerank is not None:  # otherwise the engine's own default applies
+            body["rerank"] = rerank
+        resp = await http.post("/search", json=body)
         resp.raise_for_status()
         data = resp.json()
         # Handle both old (list) and new (dict with results+meta) format

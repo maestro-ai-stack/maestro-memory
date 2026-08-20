@@ -43,7 +43,7 @@ async def _try_daemon_search(query: str, limit: int) -> dict | None:
             return None
         from maestro_memory.client import MemoryClient
         client = MemoryClient()
-        result = await client.search(query, limit=limit, rerank=True)
+        result = await client.search(query, limit=limit)
         await client.close()
         return result  # dict with "results" and "meta"
     except Exception:

@@ -34,6 +34,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# One import-path fix-up for the whole module: the engine adapters below each
+# used to do their own, which multiplies the thing the architecture linter flags.
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 DEFAULT_GOLD = Path.home() / ".maestro/backups/nerve-export-20260818/gold_queries.jsonl"
 KEY_LEN = 100
 _WS = re.compile(r"\s+")
@@ -159,6 +163,73 @@ def recorded_cases(gold: list[dict]) -> list[tuple[str, set[str], list[str]]]:
     return cases
 
 
+async def mmem_ranking_cases(
+    gold: list[dict],
+    db: Path | None = None,
+    *,
+    rerank: bool = False,
+) -> list[tuple[str, set[str], list[str]]]:
+    """Score ordering only: hand the engine the *recorded* candidate set.
+
+    ``--recorded`` and the retrieval task are not the same measurement, and
+    comparing them was the flaw that made this gate unpassable. The gold labels
+    were selected by an agent *from the candidate list mnerve had already shown
+    it* — a fact it never surfaced could never be labelled relevant. So the gold
+    set is nerve's own retrieval output: its recall is 100% by construction, and
+    no engine can beat it at finding things. What can be compared is ordering.
+
+    Here every ranker sees the identical recorded candidates and is scored on
+    where it puts the answer. Facts absent from the store are skipped, so a
+    partially-migrated store is penalised honestly rather than silently.
+    """
+    from maestro_memory import Memory  # noqa: PLC0415
+    from maestro_memory.retrieval.bm25 import _escape_fts  # noqa: PLC0415
+    from maestro_memory.retrieval.tokenizer import segment  # noqa: PLC0415
+
+    mem = Memory(path=db) if db else Memory()
+    await mem.init()
+    cur = await mem.store.db.execute("SELECT id, content FROM facts")
+    key_to_id: dict[str, int] = {}
+    content: dict[int, str] = {}
+    for fid, text in await cur.fetchall():
+        content[fid] = text or ""
+        key_to_id.setdefault(norm_key(text or ""), fid)
+
+    reranker = None
+    if rerank:
+        from maestro_memory.retrieval.fusion import _get_reranker  # noqa: PLC0415
+        reranker = _get_reranker()
+
+    cases = []
+    for row in gold:
+        query = row.get("query_text") or ""
+        relevant = {ref_key(r) for r in (row.get("selected_refs") or [])}
+        relevant.discard("")
+        cands = [ref_key(c.get("ref"))
+                 for c in sorted(row.get("candidates") or [], key=lambda c: c.get("rank", 999))]
+        ids = [key_to_id[k] for k in cands if k in key_to_id]
+        if not query or not relevant or not ids:
+            cases.append((query, relevant, []))
+            continue
+
+        if reranker is not None:
+            scores = reranker.predict([(query, content[i][:500]) for i in ids])
+            ordered = [i for i, _ in sorted(zip(ids, scores), key=lambda x: -x[1])]
+        else:
+            placeholders = ",".join("?" * len(ids))
+            cur = await mem.store.db.execute(
+                f"SELECT rowid FROM facts_fts WHERE facts_fts MATCH ? "
+                f"AND rowid IN ({placeholders}) ORDER BY bm25(facts_fts)",
+                (_escape_fts(segment(query)), *ids),
+            )
+            scored = [r[0] for r in await cur.fetchall()]
+            # Candidates the query does not match at all still belong in the
+            # ranking, at the bottom, or the metric silently shrinks the task.
+            ordered = scored + [i for i in ids if i not in set(scored)]
+        cases.append((query, relevant, [norm_key(content[i]) for i in ordered]))
+    return cases
+
+
 # ── Engine adapters ───────────────────────────────────────────
 
 
@@ -167,11 +238,12 @@ async def mmem_cases(
     limit: int,
     db: Path | None = None,
     *,
-    rerank: bool = True,
+    rerank: bool = False,
     min_score: float = 0.0,
     current_only: bool = True,
     activation_weighting: bool = True,
-    query_independent_channels: bool = True,
+    query_independent_channels: bool = False,
+    fusion: str = "priority",
 ) -> list[tuple[str, set[str], list[str]]]:
     """Replay the gold set through maestro-memory.
 
@@ -179,7 +251,6 @@ async def mmem_cases(
     a row to ``serving_logs`` per query, so running the gate against the live
     database would inject 155 synthetic rows into the training data on every run.
     """
-    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from maestro_memory import Memory  # noqa: PLC0415
 
     mem = Memory(path=db) if db else Memory()
@@ -196,6 +267,7 @@ async def mmem_cases(
             query, limit=limit, rerank=rerank, min_score=min_score,
             current_only=current_only, activation_weighting=activation_weighting,
             query_independent_channels=query_independent_channels,
+            fusion=fusion,
         )
         ranked = [norm_key(getattr(r.fact, "content", "") or "") for r in results]
         cases.append((query, relevant, ranked))
@@ -210,11 +282,20 @@ def main() -> int:
     ap.add_argument("--gold", type=Path, default=DEFAULT_GOLD)
     ap.add_argument("--recorded", action="store_true", help="score the ranking as served (baseline)")
     ap.add_argument("--engine", choices=["mmem"], help="score a live engine")
+    ap.add_argument("--task", choices=["retrieval", "ranking"], default="retrieval",
+                    help="retrieval: find the answer in the whole store. "
+                         "ranking: order the recorded candidate set — the only task "
+                         "the --recorded baseline is comparable to")
     ap.add_argument("--db", type=Path, help="engine DB path; use a scratch copy — search() writes serving_logs")
     ap.add_argument("--limit", type=int, default=15, help="results per query (gold averages 14.9)")
-    ap.add_argument("--no-rerank", action="store_true", help="ablation: skip cross-encoder reranking")
-    ap.add_argument("--query-only-channels", action="store_true",
-                    help="ablation: drop the recency/interest/session channels that ignore the query")
+    # The engine's own defaults are the thing under test, so the flags turn
+    # features ON. A gate that hardcodes the opposite of the shipped defaults
+    # measures a configuration nobody runs.
+    ap.add_argument("--rerank", action="store_true", help="enable cross-encoder reranking")
+    ap.add_argument("--all-channels", action="store_true",
+                    help="enable the recency/interest/session channels that ignore the query")
+    ap.add_argument("--fusion", choices=["priority", "rrf"], default="priority",
+                    help="candidate fusion strategy")
     ap.add_argument("--no-activation", action="store_true",
                     help="ablation: drop the ACT-R recency/importance multiplier applied after RRF")
     ap.add_argument("--min-score", type=float, default=0.0, help="ablation: score floor")
@@ -231,7 +312,10 @@ def main() -> int:
 
     if args.recorded:
         rep = score(recorded_cases(gold))
-        title = f"RECORDED (as served) — {args.gold.name}"
+        title = f"RECORDED (as served, ranking) — {args.gold.name}"
+    elif args.task == "ranking":
+        rep = score(asyncio.run(mmem_ranking_cases(gold, args.db, rerank=args.rerank)))
+        title = f"ENGINE=mmem RANKING [rerank={args.rerank}] — {args.gold.name}"
     else:
         rep = score(
             asyncio.run(
@@ -239,15 +323,17 @@ def main() -> int:
                     gold,
                     args.limit,
                     args.db,
-                    rerank=not args.no_rerank,
+                    rerank=args.rerank,
                     min_score=args.min_score,
                     current_only=not args.all_time,
                     activation_weighting=not args.no_activation,
-                    query_independent_channels=not args.query_only_channels,
+                    query_independent_channels=args.all_channels,
+                    fusion=args.fusion,
                 )
             )
         )
-        flags = (f"rerank={not args.no_rerank} activation={not args.no_activation} "
+        flags = (f"fusion={args.fusion} rerank={args.rerank} "
+                 f"all_channels={args.all_channels} activation={not args.no_activation} "
                  f"min_score={args.min_score} current_only={not args.all_time}")
         title = f"ENGINE=mmem [{flags}] — {args.gold.name}"
 

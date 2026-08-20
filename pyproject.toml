@@ -43,7 +43,11 @@ ann = ["hnswlib>=0.8"]
 server = ["fastapi>=0.115", "uvicorn>=0.32", "httpx>=0.28"]
 mcp = ["mcp>=1.0", "httpx>=0.28"]
 all = ["maestro-memory[local]", "maestro-memory[openai]", "maestro-memory[anthropic]", "maestro-memory[chinese]", "maestro-memory[ann]"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "httpx>=0.28"]
+# sentence-transformers is a dev dependency, not an optional nicety: without it
+# search silently degrades to keyword-only and the retrieval gate scores 23/126
+# instead of 90/126, which reads as a catastrophic regression rather than a
+# missing package.
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "httpx>=0.28", "sentence-transformers>=3.0"]
 
 [project.scripts]
 maestro-memory = "maestro_memory.cli:app"

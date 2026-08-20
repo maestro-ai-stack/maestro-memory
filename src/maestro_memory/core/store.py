@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypeVar
 
 import aiosqlite
 
@@ -10,6 +12,11 @@ from maestro_memory.core.models import Entity, Episode, Fact, Relation
 from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.schema import get_schema
 from maestro_memory.retrieval.tokenizer import segment
+
+T = TypeVar("T")
+
+# SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 999 on older builds.
+_ID_CHUNK = 500
 
 
 class Store:
@@ -159,6 +166,30 @@ class Store:
         cur = await self.db.execute("SELECT * FROM facts WHERE id = ?", (fact_id,))
         row = await cur.fetchone()
         return self._row_to_fact(row) if row else None
+
+    async def get_facts(self, fact_ids: Iterable[int]) -> dict[int, Fact]:
+        """Load many facts in one round-trip, keyed by id.
+
+        The search pipeline resolves a few hundred fused candidates per query;
+        doing that one ``get_fact`` at a time is a few hundred awaits against
+        the connection thread. Callers impose their own ordering.
+        """
+        return {f.id: f for f in await self._by_ids("facts", fact_ids, self._row_to_fact)}
+
+    async def get_entities(self, entity_ids: Iterable[int]) -> dict[int, Entity]:
+        """Load many entities in one round-trip, keyed by id."""
+        return {e.id: e for e in await self._by_ids("entities", entity_ids, self._row_to_entity)}
+
+    async def _by_ids(self, table: str, ids: Iterable[int], to_model: Callable[[aiosqlite.Row], T]) -> list[T]:
+        """Fetch rows by primary key, chunked to stay under SQLite's variable limit."""
+        unique = list(dict.fromkeys(ids))
+        out: list[T] = []
+        for i in range(0, len(unique), _ID_CHUNK):
+            chunk = unique[i:i + _ID_CHUNK]
+            placeholders = ",".join("?" * len(chunk))
+            cur = await self.db.execute(f"SELECT * FROM {table} WHERE id IN ({placeholders})", chunk)
+            out.extend(to_model(row) for row in await cur.fetchall())
+        return out
 
     async def update_fact(self, fact_id: int, content: str) -> None:
         await self.db.execute("UPDATE facts SET content = ? WHERE id = ?", (content, fact_id))

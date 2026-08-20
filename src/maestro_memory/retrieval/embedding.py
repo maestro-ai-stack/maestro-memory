@@ -102,7 +102,7 @@ def get_embedding_provider(provider: str = "local", model: str = "all-MiniLM-L6-
         logger.warning(
             "sentence-transformers is not installed; semantic recall is DISABLED "
             "and search will fall back to keyword matching only. "
-            "Install it with: pip install 'maestro-memory[dense]'",
+            "Install it with: pip install 'maestro-memory[local]'",
         )
         return NullEmbeddingProvider()
     resolved = _MODEL_ALIASES.get(model, model)

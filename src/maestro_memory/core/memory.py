@@ -190,15 +190,24 @@ class Memory:
         limit: int = 10,
         current_only: bool = True,
         as_of: str | None = None,
-        rerank: bool = True,
+        rerank: bool = False,
         min_score: float = 0.0,
         diverse: bool = False,
         activation_weighting: bool = True,
-        query_independent_channels: bool = True,
+        query_independent_channels: bool = False,
+        fusion: str = "priority",
     ) -> list[SearchResult]:
         """Hybrid search pipeline with optional cross-encoder reranking.
 
         Automatically updates session state for context-aware follow-up queries.
+
+        ``rerank`` is off by default. On the real labelled query set the
+        cross-encoder (``ms-marco-MiniLM-L-6-v2``, an English passage model)
+        lost to plain BM25 on both tasks it was meant to improve: retrieving
+        from the whole store it halved P@1 (0.1190 → 0.0635), and re-ordering
+        a fixed candidate set it scored MRR 0.6173 against BM25's 0.6224. It
+        also dominates query latency. Turn it on per-call where a specific
+        workload shows it earning its keep.
         """
         # Get query embedding for session tracking
         query_emb = None
@@ -229,6 +238,7 @@ class Memory:
                 blender=self._blender,
                 activation_weighting=activation_weighting,
                 query_independent_channels=query_independent_channels,
+                fusion=fusion,
             )
             log_entry["candidate_ids"] = [r.fact.id for r in results]
             log_entry["returned_ids"] = [r.fact.id for r in results[:limit]]

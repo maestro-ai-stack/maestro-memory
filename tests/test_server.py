@@ -40,7 +40,7 @@ async def test_add_and_search(client):
     assert data["facts_added"] >= 1
 
     # Search for it
-    resp = await client.post("/search", json={"query": "editor preferences", "limit": 5, "rerank": False})
+    resp = await client.post("/search", json={"query": "dark mode", "limit": 5, "rerank": False})
     assert resp.status_code == 200
     data = resp.json()
     assert "results" in data

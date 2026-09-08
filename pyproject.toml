@@ -52,6 +52,7 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "httpx>=0.28", "sente
 [project.scripts]
 maestro-memory = "maestro_memory.cli:app"
 mmem = "maestro_memory.cli:app"
+mnerve = "maestro_memory.cli.mnerve:app"
 mmem-mcp = "maestro_memory.mcp.server:run"
 
 [tool.hatch.build.targets.wheel]

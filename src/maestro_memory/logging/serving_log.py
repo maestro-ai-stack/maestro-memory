@@ -20,7 +20,7 @@ class ServingLogger:
         entry = {"query": query, "t0": time.perf_counter()}
         yield entry
         latency_ms = (time.perf_counter() - entry["t0"]) * 1000
-        await self._store.db.execute(
+        cur = await self._store.db.execute(
             "INSERT INTO serving_logs (query, candidate_fact_ids, returned_fact_ids, features_json, latency_ms) VALUES (?, ?, ?, ?, ?)",
             (
                 query,
@@ -31,6 +31,7 @@ class ServingLogger:
             ),
         )
         await self._store.db.commit()
+        entry["query_id"] = int(cur.lastrowid)
 
     async def record_feedback(self, query: str, used_fact_ids: list[int]) -> None:
         """Record which facts were actually used (implicit feedback)."""
@@ -40,6 +41,15 @@ class ServingLogger:
             (json.dumps(used_fact_ids), query),
         )
         await self._store.db.commit()
+
+    async def record_feedback_by_id(self, query_id: int, used_fact_ids: list[int]) -> bool:
+        """Attach feedback to the exact search identified by the local token."""
+        cur = await self._store.db.execute(
+            "UPDATE serving_logs SET used_fact_ids = ? WHERE id = ?",
+            (json.dumps(used_fact_ids), query_id),
+        )
+        await self._store.db.commit()
+        return cur.rowcount == 1
 
     async def get_training_data(self, limit: int = 1000) -> list[dict]:
         """Get logs with feedback for training."""

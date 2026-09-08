@@ -34,6 +34,7 @@ class Memory:
         self.last_search_meta = None  # populated after every search()
         self._last_search_results: list[SearchResult] = []  # for feedback()
         self._last_search_query: str = ""
+        self.last_search_id: int | None = None
         self._confidence_threshold = 0.001
         self.profile = UserProfile()
         self._preranker = PreRanker()
@@ -83,6 +84,7 @@ class Memory:
         importance: float = 0.5,
         entity_name: str | None = None,
         entity_type: str = "concept",
+        idempotency_key: str | None = None,
     ) -> AddResult:
         """Ingest content into memory.
 
@@ -94,7 +96,14 @@ class Memory:
             if any(kw in content_upper for kw in ["CRITICAL", "IMPORTANT", "MUST", "NEVER", "DO NOT"]):
                 importance = 0.9
 
-        episode_id = await self.store.add_episode(content, source_type, source_ref)
+        if idempotency_key:
+            episode_id, created = await self.store.add_episode_once(
+                content, source_type, idempotency_key, source_ref
+            )
+            if not created:
+                return AddResult(episode_id=episode_id, idempotent_replay=True)
+        else:
+            episode_id = await self.store.add_episode(content, source_type, source_ref)
 
         # Agent-provided entity metadata stays explicit and inspectable.
         if entity_name:
@@ -261,6 +270,8 @@ class Memory:
                     {name: float(feats[i]) for i, name in enumerate(FEATURE_NAMES)}
                 )
             log_entry["features_json"] = json.dumps(features_list)
+
+        self.last_search_id = int(log_entry["query_id"])
 
         # Compute search metadata (confidence + hints for agent)
         from maestro_memory.core.models import SearchMeta

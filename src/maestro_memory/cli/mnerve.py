@@ -72,7 +72,7 @@ def understand(
         typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
         return
 
-    query_id = _query_id(question)
+    query_id = f"query:{result['query_id']}" if result.get("query_id") else _query_id(question)
     meta = result.get("meta") or {}
     typer.echo(f"Recall [{query_id}] confidence={meta.get('confidence', 'unknown')}")
     items = [item for item in result.get("results") or [] if int(item.get("fact_id", -1)) >= 0]
@@ -99,7 +99,8 @@ def remember(
     payload: dict[str, Any] = {
         "content": content,
         "source_type": "agent",
-        "source_ref": idempotency_key or title,
+        "source_ref": title,
+        "idempotency_key": idempotency_key,
         "fact_type": type_map.get(fact_type, fact_type),
         "importance": importance,
         "entity_name": entity,
@@ -110,10 +111,13 @@ def remember(
     except RuntimeError as exc:
         typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc
-    typer.echo(
-        f"Remembered episode:{result.get('episode_id')} "
-        f"added={result.get('facts_added', 0)} updated={result.get('facts_updated', 0)}"
-    )
+    if result.get("idempotent_replay"):
+        typer.echo(f"Already remembered episode:{result.get('episode_id')} (idempotent replay)")
+    else:
+        typer.echo(
+            f"Remembered episode:{result.get('episode_id')} "
+            f"added={result.get('facts_added', 0)} updated={result.get('facts_updated', 0)}"
+        )
 
 
 @app.command()
@@ -131,9 +135,17 @@ def feedback(
         typer.echo("Error: provide fact:<id> targets or use --none", err=True)
         raise typer.Exit(1)
     try:
-        query = _decode_query_id(query_id)
         fact_ids = [] if none else [_parse_fact_target(token) for token in selected]
-        result = _request("POST", "/feedback", {"query": query, "used_fact_ids": fact_ids})
+        if query_id.startswith("query:"):
+            try:
+                payload = {"query_id": int(query_id.removeprefix("query:")), "used_fact_ids": fact_ids}
+            except ValueError as exc:
+                raise ValueError("query_id must be copied from mnerve understand output") from exc
+        else:
+            payload = {"query": _decode_query_id(query_id), "used_fact_ids": fact_ids}
+        result = _request("POST", "/feedback", payload)
+        if result.get("status", "ok") != "ok":
+            raise ValueError("query_id was not found in local memory")
     except (RuntimeError, ValueError) as exc:
         typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc

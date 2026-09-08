@@ -36,15 +36,18 @@ The daemon starts locally on first use.
 mnerve remember "The client approved the revised scope" \
   --type decision \
   --entity "Project Atlas" \
-  --entity-type project
+  --entity-type project \
+  --idempotency-key "email:message-id"
 
 mnerve understand "What did Project Atlas approve?" --limit 3
-mnerve feedback '<query-id>' fact:42
+mnerve feedback query:17 fact:42
 mnerve status
 ```
 
-`understand` returns compact, copyable `fact:<id>` targets. `feedback` records
-which results were useful so ranking can improve from real use.
+`understand` returns a short `query:<id>` token and copyable `fact:<id>` targets.
+`feedback` records which results were useful so ranking can improve from real
+use. Give retried writes the same `--idempotency-key`; they resolve to the
+original episode without duplicating facts.
 
 ## Use `mmem`
 

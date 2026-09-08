@@ -139,3 +139,4 @@ class AddResult:
     facts_updated: int = 0
     facts_invalidated: int = 0
     entities_created: int = 0
+    idempotent_replay: bool = False

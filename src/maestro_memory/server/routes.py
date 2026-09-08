@@ -37,6 +37,7 @@ class AddRequest(BaseModel):
     importance: float = 0.5
     entity_name: str | None = None
     entity_type: str = "concept"
+    idempotency_key: str | None = None
 
 
 class AddResponse(BaseModel):
@@ -45,6 +46,7 @@ class AddResponse(BaseModel):
     facts_updated: int = 0
     facts_invalidated: int = 0
     entities_created: int = 0
+    idempotent_replay: bool = False
 
 
 @router.get("/health")
@@ -57,6 +59,7 @@ async def health():
 class SearchResponse(BaseModel):
     results: list[SearchResultItem]
     meta: dict  # confidence, best_score, hint — guides agent behavior
+    query_id: int
 
 
 @router.post("/search")
@@ -83,6 +86,7 @@ async def search(req: SearchRequest) -> SearchResponse:
     meta = mem.last_search_meta
     return SearchResponse(
         results=items,
+        query_id=mem.last_search_id or 0,
         meta={
             "confidence": meta.confidence if meta else "high",
             "best_score": meta.best_score if meta else 0.0,
@@ -103,6 +107,7 @@ async def add(req: AddRequest) -> AddResponse:
         importance=req.importance,
         entity_name=req.entity_name,
         entity_type=req.entity_type,
+        idempotency_key=req.idempotency_key,
     )
     return AddResponse(
         episode_id=result.episode_id,
@@ -110,11 +115,13 @@ async def add(req: AddRequest) -> AddResponse:
         facts_updated=result.facts_updated,
         facts_invalidated=result.facts_invalidated,
         entities_created=result.entities_created,
+        idempotent_replay=result.idempotent_replay,
     )
 
 
 class FeedbackRequest(BaseModel):
-    query: str
+    query: str | None = None
+    query_id: int | None = None
     used_fact_ids: list[int]
 
 
@@ -125,7 +132,14 @@ async def feedback(req: FeedbackRequest):
 
     # Record in serving_logs (use the Memory's own logger)
     if mem._serving_logger:
-        await mem._serving_logger.record_feedback(req.query, req.used_fact_ids)
+        if req.query_id is not None:
+            recorded = await mem._serving_logger.record_feedback_by_id(req.query_id, req.used_fact_ids)
+            if not recorded:
+                return {"status": "not_found", "facts_updated": 0}
+        elif req.query is not None:
+            await mem._serving_logger.record_feedback(req.query, req.used_fact_ids)
+        else:
+            return {"status": "missing_query", "facts_updated": 0}
 
     # Increment access_count for each used fact
     for fid in req.used_fact_ids:

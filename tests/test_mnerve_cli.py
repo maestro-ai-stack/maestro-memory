@@ -21,6 +21,7 @@ def test_understand_is_compact_and_emits_copyable_local_targets(monkeypatch) -> 
                 }
             ],
             "meta": {"confidence": "high"},
+            "query_id": 17,
         },
     )
 
@@ -29,7 +30,8 @@ def test_understand_is_compact_and_emits_copyable_local_targets(monkeypatch) -> 
     assert result.exit_code == 0, result.output
     assert "confidence=high" in result.output
     assert "fact:42 [Ao Wang]" in result.output
-    assert "Feedback: mnerve feedback 'local:" in result.output
+    assert "Recall [query:17]" in result.output
+    assert "Feedback: mnerve feedback 'query:17'" in result.output
     assert "https://" not in result.output
 
 
@@ -68,6 +70,20 @@ def test_feedback_decodes_query_and_records_fact_ids(monkeypatch) -> None:
     assert calls == [("POST", "/feedback", {"query": "Ao grant", "used_fact_ids": [42]})]
 
 
+def test_feedback_uses_short_server_query_id(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        mnerve,
+        "_request",
+        lambda method, path, payload=None: calls.append((method, path, payload)) or {"status": "ok", "facts_updated": 1},
+    )
+
+    result = runner.invoke(mnerve.app, ["feedback", "query:17", "fact:42"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("POST", "/feedback", {"query_id": 17, "used_fact_ids": [42]})]
+
+
 def test_remember_uses_local_add_contract(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
@@ -84,7 +100,8 @@ def test_remember_uses_local_add_contract(monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert calls[0][0:2] == ("POST", "/add")
     assert calls[0][2]["fact_type"] == "observation"
-    assert calls[0][2]["source_ref"] == "gmail:1"
+    assert calls[0][2]["source_ref"] is None
+    assert calls[0][2]["idempotency_key"] == "gmail:1"
 
 
 def test_failure_has_no_fallback(monkeypatch) -> None:

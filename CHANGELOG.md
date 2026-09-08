@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Local-only `mnerve` compatibility CLI with compact recall and explicit feedback.
+- Short server-issued `query:<id>` feedback tokens and retry-safe writes via
+  `mnerve remember --idempotency-key`.
 - Loopback daemon endpoint shared by the CLI, client, server, and launchd resource.
 - Release gate covering lint, tests, package build, metadata, and local-only boundaries.
 

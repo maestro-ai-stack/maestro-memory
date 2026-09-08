@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ class Store:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
+        self._episode_lock = asyncio.Lock()
 
     async def init(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,6 +54,45 @@ class Store:
         )
         await self.db.commit()
         return cur.lastrowid  # type: ignore[return-value]
+
+    async def add_episode_once(
+        self,
+        content: str,
+        source_type: str,
+        idempotency_key: str,
+        source_ref: str | None = None,
+    ) -> tuple[int, bool]:
+        """Create an episode once for an explicit retry key.
+
+        Returns ``(episode_id, created)``. ``BEGIN IMMEDIATE`` makes concurrent
+        retries resolve to the same episode instead of producing duplicates.
+        """
+        async with self._episode_lock:
+            await self.db.execute("BEGIN IMMEDIATE")
+            try:
+                cur = await self.db.execute(
+                    "SELECT episode_id FROM idempotency_keys WHERE source_type = ? AND key = ?",
+                    (source_type, idempotency_key),
+                )
+                row = await cur.fetchone()
+                if row:
+                    await self.db.commit()
+                    return int(row["episode_id"]), False
+
+                cur = await self.db.execute(
+                    "INSERT INTO episodes (content, source_type, source_ref) VALUES (?, ?, ?)",
+                    (content, source_type, source_ref),
+                )
+                episode_id = int(cur.lastrowid)
+                await self.db.execute(
+                    "INSERT INTO idempotency_keys (source_type, key, episode_id) VALUES (?, ?, ?)",
+                    (source_type, idempotency_key, episode_id),
+                )
+                await self.db.commit()
+                return episode_id, True
+            except Exception:
+                await self.db.rollback()
+                raise
 
     async def get_episode(self, episode_id: int) -> Episode | None:
         cur = await self.db.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,))

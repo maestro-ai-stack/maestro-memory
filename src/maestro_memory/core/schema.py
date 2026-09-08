@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS episodes (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Explicit retry keys. Kept separate from source_ref because the same source
+-- may legitimately contribute more than one episode.
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    source_type TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    episode_id  INTEGER NOT NULL REFERENCES episodes(id),
+    PRIMARY KEY (source_type, key)
+);
+
 -- Entities: subjects in the knowledge graph
 CREATE TABLE IF NOT EXISTS entities (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

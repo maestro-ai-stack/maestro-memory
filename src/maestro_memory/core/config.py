@@ -13,7 +13,6 @@ CONFIG_PATH = BASE_DIR / "config.toml"
 
 DEFAULT_CONFIG: dict = {
     "embedding": {"provider": "local", "model": "all-MiniLM-L6-v2"},
-    "llm": {"provider": "none"},
     "storage": {"base_dir": str(BASE_DIR)},
 }
 
@@ -40,9 +39,6 @@ def write_default_config() -> Path:
         '[embedding]',
         'provider = "local"',
         'model = "all-MiniLM-L6-v2"',
-        '',
-        '[llm]',
-        'provider = "none"  # "openai" | "anthropic" | "none"',
         '',
         '[storage]',
         f'base_dir = "{BASE_DIR}"',

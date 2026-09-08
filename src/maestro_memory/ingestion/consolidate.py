@@ -7,7 +7,7 @@ from pathlib import Path
 from maestro_memory.core.memory import Memory
 from maestro_memory.ingestion.chunker import chunk_text
 from maestro_memory.ingestion.dedup import is_duplicate
-from maestro_memory.ingestion.ocr import is_image, is_ocr_target, ocr_extract
+from maestro_memory.ingestion.ocr import is_image, ocr_extract
 
 # ── Result stats ────────────────────────────────────────────────────
 

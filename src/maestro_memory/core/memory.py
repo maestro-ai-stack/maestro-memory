@@ -8,7 +8,6 @@ from maestro_memory.core.profile import UserProfile
 from maestro_memory.core.session import SessionState
 from maestro_memory.core.store import Store
 from maestro_memory.ingestion.enrichment import enrich_for_embedding
-from maestro_memory.ingestion.extractor import llm_extract
 from maestro_memory.ingestion.fallback import fallback_extract
 from maestro_memory.logging.serving_log import ServingLogger
 from maestro_memory.ranking.blender import ThompsonBlender
@@ -87,7 +86,7 @@ class Memory:
     ) -> AddResult:
         """Ingest content into memory.
 
-        Agent can specify entity_name directly, skipping LLM extraction.
+        Agent can specify entity metadata directly.
         """
         # Auto-detect importance from content keywords
         if importance == 0.5:  # only if not explicitly set
@@ -97,16 +96,12 @@ class Memory:
 
         episode_id = await self.store.add_episode(content, source_type, source_ref)
 
-        # Agent provides entity directly -> skip LLM extraction
+        # Agent-provided entity metadata stays explicit and inspectable.
         if entity_name:
             operations = [{"op": "ADD", "fact": content, "entity": entity_name,
                           "entity_type": entity_type, "type": fact_type, "importance": importance}]
         else:
-            # Try LLM extraction first, then fallback
-            existing = await self.store.list_entities()
-            operations = await llm_extract(content, existing)
-            if not operations:
-                operations = await fallback_extract(content)
+            operations = await fallback_extract(content)
 
         result = AddResult(episode_id=episode_id)
 

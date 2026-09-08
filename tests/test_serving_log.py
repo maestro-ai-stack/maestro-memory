@@ -5,7 +5,6 @@ import json
 
 import numpy as np
 import pytest
-import pytest_asyncio
 
 from maestro_memory.logging.serving_log import ServingLogger
 from maestro_memory.ranking.blender import ThompsonBlender

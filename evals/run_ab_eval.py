@@ -9,7 +9,6 @@ For each scenario:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import subprocess
@@ -115,11 +114,11 @@ def run_scenario(scenario: dict, results_dir: Path) -> dict:
         seed_scenario(scenario, db_path)
 
         # with skill
-        print(f"  Running WITH skill...")
+        print("  Running WITH skill...")
         with_output = run_claude(scenario["query"], with_skill=True, db_path=db_path)
 
         # without skill
-        print(f"  Running WITHOUT skill...")
+        print("  Running WITHOUT skill...")
         without_output = run_claude(scenario["query"], with_skill=False, db_path=db_path)
 
     # Grade outputs
@@ -167,7 +166,7 @@ def main():
 
     # Summary report
     print(f"\n{'='*60}")
-    print(f"  SUMMARY")
+    print("  SUMMARY")
     print(f"{'='*60}")
     print(f"  {'Scenario':<25} {'With':>8} {'Without':>8} {'Delta':>8}")
     print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8}")

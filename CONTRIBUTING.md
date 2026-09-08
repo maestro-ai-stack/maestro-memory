@@ -9,10 +9,12 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,local]"
 ```
 
-## Running Tests
+## Running Checks
+
+Run the same release gate used by pre-commit and CI:
 
 ```bash
-pytest tests/ -v
+./scripts/check.sh
 ```
 
 ## Code Style
@@ -45,7 +47,7 @@ python evals/run_longmemeval.py --data s --limit 50
 
 1. Fork the repo and create a feature branch.
 2. Make your changes with clear, atomic commits.
-3. Ensure all tests pass and ruff reports no issues.
+3. Ensure `./scripts/check.sh` passes.
 4. Open a PR with a description of what changed and why.
 
 ## Reporting Bugs
@@ -58,4 +60,4 @@ Open an issue with:
 
 ## Architecture
 
-See [docs/TECHNICAL.md](docs/TECHNICAL.md) for technical principles and [docs/ARCHITECTURE-v2.md](docs/ARCHITECTURE-v2.md) for the v2 roadmap.
+See [docs/TECHNICAL.md](docs/TECHNICAL.md) for the current architecture.

@@ -29,8 +29,8 @@ If no arguments were supplied, search for the current conversation topic.
 - API: `http://127.0.0.1:19830`
 - store: `~/.maestro/memory/default/mem.db`
 
-It may start the native local Python daemon when unavailable. It must not start
-Docker or call a hosted Nerve, Fly.io, or Cloudflare endpoint.
+It may start the native local Python daemon when unavailable. It never calls a
+hosted memory service or starts a container runtime.
 
 ## Required loop
 

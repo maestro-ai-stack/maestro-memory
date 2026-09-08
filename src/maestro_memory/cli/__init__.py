@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import typer
 
+from maestro_memory.server.config import DAEMON_HOST, DAEMON_PORT, DAEMON_URL
+
 from maestro_memory.cli.add import add_cmd
 from maestro_memory.cli.config import config_app
 from maestro_memory.cli.consolidate import consolidate_cmd
@@ -33,11 +35,11 @@ def server_start_cmd(
         import uvicorn
         from maestro_memory.server.app import create_app
         app_ = create_app(project=project)
-        uvicorn.run(app_, host="127.0.0.1", port=19830)
+        uvicorn.run(app_, host=DAEMON_HOST, port=DAEMON_PORT)
     else:
         from maestro_memory.cli.daemon import ensure_daemon
         if ensure_daemon():
-            typer.echo("Server running on http://localhost:19830")
+            typer.echo(f"Server running on {DAEMON_URL}")
         else:
             typer.echo("Failed to start server. Check ~/.maestro/memory/server.log")
 
@@ -65,6 +67,8 @@ def server_install_cmd():
     content = content.replace("__PYTHON_PATH__", python_path)
     content = content.replace("__LOG_DIR__", str(log_dir))
     content = content.replace("__HOME__", str(Path.home()))
+    content = content.replace("__HOST__", DAEMON_HOST)
+    content = content.replace("__PORT__", str(DAEMON_PORT))
 
     plist_dst.write_text(content)
 

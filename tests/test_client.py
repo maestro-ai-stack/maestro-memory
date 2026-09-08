@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from maestro_memory.server.app import create_app
 from maestro_memory.server import lifecycle
+from maestro_memory.server.config import DAEMON_URL
 from maestro_memory.client import MemoryClient
 
 
@@ -16,9 +17,14 @@ async def server_and_client(tmp_path):
     app = create_app(db_path=tmp_path / "test.db")
     async with lifecycle.lifespan(app):
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as http:
-            client = MemoryClient(base_url="http://test", http_client=http)
+        async with AsyncClient(transport=transport, base_url=DAEMON_URL) as http:
+            client = MemoryClient(http_client=http)
             yield client
+
+
+def test_client_rejects_remote_endpoints():
+    with pytest.raises(ValueError, match="only connects to the local daemon"):
+        MemoryClient(base_url="https://memory.example.com")
 
 
 @pytest.mark.asyncio

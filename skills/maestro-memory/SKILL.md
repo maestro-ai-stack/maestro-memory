@@ -1,10 +1,11 @@
 ---
 name: maestro-memory
 description: |
-  Business knowledge brain — stores and retrieves facts about prospects, datasets, projects, decisions, domain expertise.
-  AUTO-ACTIVATE on ANY non-trivial conversation: business strategy, prospect research, dataset work, domain discussion, cold email, pricing, product design, architecture decisions.
-  Triggers: mmem, remember, recall, prospect, dataset, client, pricing, strategy, decision, research, 记忆, 知识图谱, 数据集, 客户.
-  Do NOT use for: collaboration preferences (→ auto-memory), code patterns (→ read code), git history (→ git log).
+  MANDATORY business knowledge system. Stores facts about prospects, datasets, projects, decisions, domain expertise.
+  MUST search before: drafting emails, working on datasets, discussing RA Data strategy, researching prospects.
+  MUST store after: learning prospect info, dataset lessons, business decisions, domain insights, client interactions.
+  Triggers: mmem, prospect, dataset, client, pricing, strategy, decision, RA Data, cold email, 知识图谱, 数据集, 客户.
+  Do NOT use for: collaboration preferences (→ auto-memory), session history (→ recall), code patterns (→ read code).
 allowed-tools: Bash(mmem *)
 ---
 

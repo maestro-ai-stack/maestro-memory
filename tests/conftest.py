@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import pytest_asyncio
 
 from maestro_memory.core.memory import Memory

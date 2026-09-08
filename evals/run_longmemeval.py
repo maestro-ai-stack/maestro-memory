@@ -34,7 +34,7 @@ from maestro_memory import Memory
 
 
 # ── Paths ──────────────────────────────────────────────────────────
-LONGMEMEVAL_DIR = Path.home() / "maestro/projects/LongMemEval/data"
+LONGMEMEVAL_DIR = Path(os.environ.get("LONGMEMEVAL_DIR", "data/longmemeval"))
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
@@ -299,7 +299,7 @@ async def main():
     if args.limit:
         print(f"  Limited to first {args.limit} questions")
 
-    print(f"\nRunning retrieval evaluation...\n")
+    print("\nRunning retrieval evaluation...\n")
     results = await run_retrieval_eval(
         data, limit=args.limit, top_k=args.top_k,
         use_pairs=use_pairs, rerank=rerank,

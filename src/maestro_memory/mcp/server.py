@@ -8,13 +8,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-DAEMON_URL = "http://localhost:19830"
+from maestro_memory.server.config import DAEMON_URL
 
 server = Server("maestro-memory")
 
 
 def _client() -> httpx.Client:
-    return httpx.Client(base_url=DAEMON_URL, timeout=30)
+    return httpx.Client(base_url=DAEMON_URL, timeout=30, trust_env=False)
 
 
 @server.list_tools()

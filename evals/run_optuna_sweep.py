@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import tempfile
 from collections import defaultdict
@@ -28,7 +29,7 @@ except ImportError:
 
 from maestro_memory import Memory
 
-LONGMEMEVAL_DIR = Path.home() / "maestro/projects/LongMemEval/data"
+LONGMEMEVAL_DIR = Path(os.environ.get("LONGMEMEVAL_DIR", "data/longmemeval"))
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
@@ -193,10 +194,10 @@ def main():
     print(f"  OPTUNA SWEEP RESULTS ({args.n_trials} trials)")
     print(f"{'=' * 60}")
     print(f"  Best session recall: {study.best_value:.1%}")
-    print(f"  Best params:")
+    print("  Best params:")
     for k, v in study.best_params.items():
         print(f"    {k}: {v}")
-    print(f"\n  Top 5 trials:")
+    print("\n  Top 5 trials:")
     for t in sorted(study.trials, key=lambda x: x.value or 0, reverse=True)[:5]:
         print(f"    recall={t.value:.1%}  params={t.params}")
 

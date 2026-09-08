@@ -8,7 +8,8 @@ from pathlib import Path
 
 import httpx
 
-DAEMON_URL = "http://localhost:19830"
+from maestro_memory.server.config import DAEMON_PORT, DAEMON_URL
+
 PID_FILE = Path.home() / ".maestro" / "memory" / "server.pid"
 LOG_FILE = Path.home() / ".maestro" / "memory" / "server.log"
 
@@ -16,7 +17,8 @@ LOG_FILE = Path.home() / ".maestro" / "memory" / "server.log"
 def _is_daemon_running() -> bool:
     """Check if daemon responds to health check."""
     try:
-        resp = httpx.get(f"{DAEMON_URL}/health", timeout=2)
+        with httpx.Client(base_url=DAEMON_URL, timeout=2, trust_env=False) as client:
+            resp = client.get("/health")
         return resp.status_code == 200
     except Exception:
         return False
@@ -26,7 +28,7 @@ def _start_daemon() -> bool:
     """Start daemon in background. Returns True if started successfully."""
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen(
-        [sys.executable, "-m", "maestro_memory.server", "--port", "19830"],
+        [sys.executable, "-m", "maestro_memory.server", "--port", str(DAEMON_PORT)],
         stdout=open(LOG_FILE, "a"),
         stderr=subprocess.STDOUT,
         start_new_session=True,

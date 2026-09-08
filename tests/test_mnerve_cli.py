@@ -87,10 +87,10 @@ def test_remember_uses_local_add_contract(monkeypatch) -> None:
     assert calls[0][2]["source_ref"] == "gmail:1"
 
 
-def test_failure_has_no_cloud_or_docker_fallback(monkeypatch) -> None:
+def test_failure_has_no_fallback(monkeypatch) -> None:
     monkeypatch.setattr(mnerve, "_request", lambda *_args: (_ for _ in ()).throw(RuntimeError("daemon unavailable")))
 
     result = runner.invoke(mnerve.app, ["understand", "Ao grant"])
 
     assert result.exit_code == 1
-    assert "No Docker or cloud fallback was attempted" in result.output
+    assert "Local daemon only; no fallback was attempted" in result.output

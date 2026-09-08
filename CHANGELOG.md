@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-09-08
+
+### Added
+- Local-only `mnerve` compatibility CLI with compact recall and explicit feedback.
+- Loopback daemon endpoint shared by the CLI, client, server, and launchd resource.
+- Release gate covering lint, tests, package build, metadata, and local-only boundaries.
+
+### Changed
+- The base installation now includes everything required to run the local daemon.
+- Public documentation now describes the shipped local SQLite architecture.
+
+### Removed
+- Container-backed legacy migration utilities and obsolete hosted-service plans.
+- Implicit external LLM extraction triggered by ambient API-key environment variables.
+
 ## [0.2.0] - 2026-03-27
 
 ### Added

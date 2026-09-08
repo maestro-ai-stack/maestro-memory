@@ -13,39 +13,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
 
-# Load API keys from known .env files
-def load_env_keys():
-    """Load API keys from project .env files."""
-    import os
-    env_files = [
-        Path.home() / "maestro/projects/2026-1-ra-suite/.env.local",
-        Path.home() / "maestro/projects/2026-1-ra-suite/gateway-py/.env",
-        Path.home() / "maestro/projects/2025-11-ra-experiment/.env.local",
-    ]
-    for env_file in env_files:
-        if env_file.exists():
-            for line in env_file.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, val = line.partition("=")
-                    key = key.strip()
-                    val = val.strip().strip('"').strip("'")
-                    if key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY") and val:
-                        os.environ.setdefault(key, val)
-
-load_env_keys()
-
-import os
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from maestro_memory import Memory
 
-LONGMEMEVAL_DIR = Path.home() / "maestro/projects/LongMemEval/data"
+LONGMEMEVAL_DIR = Path(os.environ.get("LONGMEMEVAL_DIR", "data/longmemeval"))
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
@@ -79,8 +57,6 @@ Answer concisely and directly."""
 
 def get_judge_prompt(task: str, question: str, answer: str, response: str) -> str:
     """Get judge prompt matching LongMemEval's evaluate_qa.py exactly."""
-    abstention = question.endswith("_abs") if False else False  # handled by question_id
-
     if task in ("single-session-user", "single-session-assistant", "multi-session"):
         template = "I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no. \n\nQuestion: {}\n\nCorrect Answer: {}\n\nModel Response: {}\n\nIs the model response correct? Answer yes or no only."
     elif task == "temporal-reasoning":
@@ -274,7 +250,7 @@ def print_summary(results: list[dict], tag: str, compare_path: Path | None = Non
     print(f"{'=' * 78}")
 
     # Comparison with known benchmarks
-    print(f"\n  Comparison with known systems:")
+    print("\n  Comparison with known systems:")
     print(f"  {'System':<20s} {'QA Accuracy':>12}")
     print(f"  {'-' * 20} {'-' * 12}")
     print(f"  {'mmem [' + tag + ']':<20s} {overall:>11.1%}")

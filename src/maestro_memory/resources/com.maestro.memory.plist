@@ -9,8 +9,10 @@
         <string>__PYTHON_PATH__</string>
         <string>-m</string>
         <string>maestro_memory.server</string>
+        <string>--host</string>
+        <string>__HOST__</string>
         <string>--port</string>
-        <string>19830</string>
+        <string>__PORT__</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

@@ -3,22 +3,27 @@ from __future__ import annotations
 
 import httpx
 
+from maestro_memory.server.config import DAEMON_HOST, DAEMON_URL
+
 
 class MemoryClient:
     """Thin HTTP client for mmem daemon."""
 
     def __init__(
         self,
-        base_url: str = "http://localhost:19830",
+        base_url: str = DAEMON_URL,
         http_client: httpx.AsyncClient | None = None,
     ):
+        url = httpx.URL(base_url)
+        if url.scheme != "http" or url.host != DAEMON_HOST:
+            raise ValueError(f"maestro-memory only connects to the local daemon at {DAEMON_URL}")
         self._base_url = base_url
         self._http = http_client
         self._owns_http = http_client is None
 
     async def _get_http(self) -> httpx.AsyncClient:
         if self._http is None:
-            self._http = httpx.AsyncClient(base_url=self._base_url, timeout=30)
+            self._http = httpx.AsyncClient(base_url=self._base_url, timeout=30, trust_env=False)
         return self._http
 
     async def search(

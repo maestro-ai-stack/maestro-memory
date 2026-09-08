@@ -9,12 +9,13 @@ from typing import Any
 import httpx
 import typer
 
-from maestro_memory.cli.daemon import DAEMON_URL, ensure_daemon
+from maestro_memory.cli.daemon import ensure_daemon
+from maestro_memory.server.config import DAEMON_URL
 
 
 app = typer.Typer(
     name="mnerve",
-    help="Local compatibility CLI for maestro-memory (no Docker or cloud service).",
+    help="Local compatibility CLI for maestro-memory.",
 )
 
 
@@ -22,8 +23,9 @@ def _request(method: str, path: str, payload: dict[str, Any] | None = None) -> d
     if not ensure_daemon():
         raise RuntimeError("local maestro-memory daemon did not become ready")
     try:
-        response = httpx.request(method, f"{DAEMON_URL}{path}", json=payload, timeout=30)
-        response.raise_for_status()
+        with httpx.Client(base_url=DAEMON_URL, timeout=30, trust_env=False) as client:
+            response = client.request(method, path, json=payload)
+            response.raise_for_status()
     except httpx.HTTPError as exc:
         raise RuntimeError(f"local maestro-memory request failed: {exc}") from exc
     data = response.json()
@@ -64,7 +66,7 @@ def understand(
     try:
         result = _request("POST", "/search", {"query": question, "limit": limit})
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}. No Docker or cloud fallback was attempted.", err=True)
+        typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc
     if json_output:
         typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
@@ -106,7 +108,7 @@ def remember(
     try:
         result = _request("POST", "/add", payload)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}. No Docker or cloud fallback was attempted.", err=True)
+        typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc
     typer.echo(
         f"Remembered episode:{result.get('episode_id')} "
@@ -133,7 +135,7 @@ def feedback(
         fact_ids = [] if none else [_parse_fact_target(token) for token in selected]
         result = _request("POST", "/feedback", {"query": query, "used_fact_ids": fact_ids})
     except (RuntimeError, ValueError) as exc:
-        typer.echo(f"Error: {exc}. No Docker or cloud fallback was attempted.", err=True)
+        typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"Feedback recorded: {result.get('facts_updated', len(fact_ids))} fact(s)")
 
@@ -154,7 +156,7 @@ def status() -> None:
     try:
         result = _request("GET", "/status")
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}. No Docker or cloud fallback was attempted.", err=True)
+        typer.echo(f"Error: {exc}. Local daemon only; no fallback was attempted.", err=True)
         raise typer.Exit(1) from exc
     typer.echo(
         f"Local memory: entities={result.get('entities', 0)} facts={result.get('facts', 0)} "

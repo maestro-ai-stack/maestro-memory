@@ -10,7 +10,6 @@ import asyncio
 import json
 import sys
 import tempfile
-from dataclasses import dataclass, field
 from pathlib import Path
 
 # Load modules
@@ -229,7 +228,7 @@ async def main():
 
     # Summary
     print(f"\n{'='*60}")
-    print(f"  RETRIEVAL BENCHMARK SUMMARY")
+    print("  RETRIEVAL BENCHMARK SUMMARY")
     print(f"{'='*60}")
     print(f"  {'Scenario':<25} {'Recall':>8} {'Queries':>8} {'Status':>8}")
     print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8}")
